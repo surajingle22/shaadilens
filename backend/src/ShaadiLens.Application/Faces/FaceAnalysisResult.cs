@@ -16,7 +16,8 @@ public sealed record FaceAnalysisResult(
 /// <param name="FacePx">min(width, height) of the box in pixels. Tiny faces give poor embeddings.</param>
 /// <param name="Blur">Laplacian variance of the face crop; higher = sharper.</param>
 public sealed record DetectedFace(
-    FaceBox BBox,
+    // Explicit name: the snake_case policy would otherwise look for "b_box".
+    [property: System.Text.Json.Serialization.JsonPropertyName("bbox")] FaceBox BBox,
     float[][] Kps,
     float DetScore,
     float[] Embedding,

@@ -1,7 +1,13 @@
+using System.Text.Json.Serialization;
+using Hangfire;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
+using ShaadiLens.Api.Auth;
 using ShaadiLens.Api.Infrastructure;
+using ShaadiLens.Application;
 using ShaadiLens.Infrastructure;
+using ShaadiLens.Infrastructure.Persistence;
 
 // Bootstrap logger: catches errors that happen before the host is fully built.
 Log.Logger = new LoggerConfiguration().WriteTo.Console().CreateBootstrapLogger();
@@ -17,17 +23,46 @@ try
         .ReadFrom.Services(services)
         .Enrich.FromLogContext());
 
-    builder.Services.AddControllers();
+    builder.Services
+        .AddControllers(o => o.Filters.Add<ValidationFilter>())
+        // Enums as strings in JSON ("FacesDetected", not 2) — easier to read in Angular and Swagger.
+        .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
     builder.Services.AddProblemDetails();                       // errors as RFC 7807 JSON
+    builder.Services.AddExceptionHandler<AppExceptionHandler>();
     builder.Services.AddExceptionHandler<FaceServiceExceptionHandler>();
     builder.Services.AddOpenApi();                              // generates /openapi/v1.json
-    builder.Services.AddInfrastructure(builder.Configuration);  // face-service client, health checks
+
+    builder.Services.AddApplication(builder.Configuration);     // use cases + validators
+    builder.Services.AddInfrastructure(builder.Configuration);  // EF Core, Hangfire, storage, face-service
+    builder.Services.AddAppAuth(builder.Configuration);         // JWT (admin cookie / guest bearer)
+
+    // We sit behind nginx (and Cloudflare Tunnel): trust X-Forwarded-For/Proto so we see the real
+    // client IP (rate limits) and know the request was HTTPS (secure cookies).
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        o.KnownIPNetworks.Clear();
+        o.KnownProxies.Clear();
+    });
 
     var app = builder.Build();
 
+    // Create/upgrade the database schema and seed the demo event.
+    if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
+    }
+
+    app.UseForwardedHeaders();
     app.UseExceptionHandler();
     app.UseStatusCodePages();
-    app.UseSerilogRequestLogging();
+    app.UseSerilogRequestLogging(o =>
+        o.GetLevel = (http, _, ex) => ex is not null || http.Response.StatusCode >= 500
+            ? Serilog.Events.LogEventLevel.Error
+            : http.Request.Path.StartsWithSegments("/media") || http.Request.Path.StartsWithSegments("/health")
+                ? Serilog.Events.LogEventLevel.Verbose     // don't flood logs with thumbnail requests
+                : Serilog.Events.LogEventLevel.Information);
 
     if (app.Environment.IsDevelopment())
     {
@@ -36,7 +71,19 @@ try
         app.UseSwaggerUI(o => o.SwaggerEndpoint("/openapi/v1.json", "ShaadiLens API v1"));
     }
 
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.UseRateLimiter();
+
     app.MapControllers();
+
+    // Background job dashboard (queues, retries, failures) — admin only.
+    app.MapHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = [new HangfireAdminAuthorizationFilter()],
+        DashboardTitle = "ShaadiLens jobs",
+        AppPath = "/admin",
+    });
 
     // Two health endpoints:
     //   /health/live -> "is the process up?" (runs no checks). Used by Docker's healthcheck so the
@@ -50,6 +97,7 @@ try
 catch (Exception ex) when (ex is not HostAbortedException)
 {
     Log.Fatal(ex, "API terminated unexpectedly");
+    throw;
 }
 finally
 {

@@ -1,10 +1,29 @@
+using Hangfire;
+using Hangfire.PostgreSql;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using ShaadiLens.Application.Abstractions;
 using ShaadiLens.Application.Faces;
 using ShaadiLens.Infrastructure.FaceService;
+using ShaadiLens.Infrastructure.Media;
+using ShaadiLens.Infrastructure.Persistence;
+using ShaadiLens.Infrastructure.Processing;
+using ShaadiLens.Infrastructure.Storage;
 
 namespace ShaadiLens.Infrastructure;
+
+public sealed class ProcessingOptions
+{
+    public const string Section = "Processing";
+    /// <summary>Run Hangfire workers in this process (false in tests).</summary>
+    public bool RunJobServer { get; set; } = true;
+    /// <summary>Parallel resize jobs. Each holds a ~2048px image in memory (~15 MB).</summary>
+    public int ImageWorkers { get; set; } = 2;
+    /// <summary>Parallel face-detection jobs (env FACE_WORKERS). Spec default: CPU cores − 1.</summary>
+    public int FaceWorkers { get; set; } = Math.Max(1, Environment.ProcessorCount - 1);
+}
 
 public static class DependencyInjection
 {
@@ -13,9 +32,26 @@ public static class DependencyInjection
 
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
-        services.Configure<FaceServiceOptions>(config.GetSection(FaceServiceOptions.Section));
+        var connectionString = config.GetConnectionString("Default")
+            ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured");
 
-        // Typed client: whoever asks for IFaceEngine gets a FaceServiceClient with this HttpClient.
+        services.Configure<FaceServiceOptions>(config.GetSection(FaceServiceOptions.Section));
+        services.Configure<StorageOptions>(config.GetSection(StorageOptions.Section));
+        services.Configure<MediaOptions>(config.GetSection(MediaOptions.Section));
+        services.Configure<ProcessingOptions>(config.GetSection(ProcessingOptions.Section));
+        services.AddSingleton(TimeProvider.System);
+
+        // ---- Database: EF Core + Npgsql + pgvector ----
+        services.AddDbContext<AppDbContext>(o => o.UseNpgsql(connectionString, npgsql => npgsql.UseVector()));
+        services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
+        services.AddScoped<DatabaseInitializer>();
+
+        // ---- Storage + signed media URLs ----
+        services.AddSingleton<LocalDiskStorage>();
+        services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<LocalDiskStorage>());
+        services.AddSingleton<IMediaUrlSigner, MediaUrlSigner>();
+
+        // ---- face-service client ----
         services.AddHttpClient<IFaceEngine, FaceServiceClient>(ConfigureFaceServiceClient);
         services.AddHttpClient(FaceServiceHealthCheck.HttpClientName, (sp, http) =>
         {
@@ -23,9 +59,37 @@ public static class DependencyInjection
             http.Timeout = TimeSpan.FromSeconds(3);
         });
 
-        var connectionString = config.GetConnectionString("Default")
-            ?? throw new InvalidOperationException("ConnectionStrings:Default is not configured");
+        // ---- Background jobs (Hangfire, stored in Postgres schema "hangfire") ----
+        services.AddScoped<ImageProcessor>();
+        services.AddScoped<PhotoJobs>();
+        services.AddScoped<IPhotoPipelineScheduler, HangfirePhotoPipelineScheduler>();
+        services.AddHangfire(cfg => cfg
+            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+            .UseSimpleAssemblyNameTypeSerializer()
+            .UseRecommendedSerializerSettings()
+            // Poll for new jobs every second (default 15 s) so thumbnails appear within ~2 s of upload.
+            .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(connectionString),
+                new PostgreSqlStorageOptions { QueuePollInterval = TimeSpan.FromSeconds(1) }));
 
+        var processing = config.GetSection(ProcessingOptions.Section).Get<ProcessingOptions>() ?? new ProcessingOptions();
+        if (processing.RunJobServer)
+        {
+            // Two Hangfire "servers" in this process = two worker pools with their own sizes.
+            services.AddHangfireServer(o =>
+            {
+                o.ServerName = "images";
+                o.Queues = ["default"];
+                o.WorkerCount = processing.ImageWorkers;
+            });
+            services.AddHangfireServer(o =>
+            {
+                o.ServerName = "faces";
+                o.Queues = ["faces"];
+                o.WorkerCount = processing.FaceWorkers;
+            });
+        }
+
+        // ---- Health checks ----
         services.AddHealthChecks()
             .AddNpgSql(connectionString, name: "postgres", tags: [ReadyTag])
             .AddCheck<FaceServiceHealthCheck>("face-service", tags: [ReadyTag]);

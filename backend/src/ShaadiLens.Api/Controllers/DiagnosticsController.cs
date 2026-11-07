@@ -1,30 +1,24 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ShaadiLens.Api.Auth;
 using ShaadiLens.Application.Faces;
 
 namespace ShaadiLens.Api.Controllers;
 
-/// <summary>
-/// Development-only endpoints to prove the .NET -> face-service link end-to-end from Swagger.
-/// Returns 404 outside Development. (Becomes admin-only tooling in Phase 1.)
-/// </summary>
+/// <summary>Admin tools to test the .NET → face-service link directly (e.g. from Swagger).</summary>
 [ApiController]
 [Route("api/v1/diagnostics")]
-public sealed class DiagnosticsController(IFaceEngine faceEngine, IWebHostEnvironment env) : ControllerBase
+[Authorize(Policy = AuthConstants.AdminPolicy)]
+public sealed class DiagnosticsController(IFaceEngine faceEngine) : ControllerBase
 {
     [HttpGet("face-engine")]
-    public async Task<ActionResult<FaceEngineInfo>> FaceEngine(CancellationToken ct)
-    {
-        if (!env.IsDevelopment()) return NotFound();
-        return await faceEngine.GetInfoAsync(ct);
-    }
+    public Task<FaceEngineInfo> FaceEngine(CancellationToken ct) => faceEngine.GetInfoAsync(ct);
 
     /// <summary>Upload an image; returns detected faces WITHOUT the embeddings (they're 512 numbers each).</summary>
     [HttpPost("face-analyze")]
     [RequestSizeLimit(50 * 1024 * 1024)]
-    public async Task<ActionResult<FaceAnalyzeSummary>> FaceAnalyze(IFormFile file, CancellationToken ct)
+    public async Task<FaceAnalyzeSummary> FaceAnalyze(IFormFile file, CancellationToken ct)
     {
-        if (!env.IsDevelopment()) return NotFound();
-
         await using var stream = file.OpenReadStream();
         var result = await faceEngine.AnalyzeAsync(stream, file.FileName, ct);
 

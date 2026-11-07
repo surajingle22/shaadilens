@@ -36,6 +36,7 @@ public sealed class FaceServiceClientTests
         result.Width.Should().Be(1280);
         result.ElapsedMs.Should().Be(412.3);
         var face = result.Faces.Should().ContainSingle().Subject;
+        face.BBox.Should().Be(new Application.Faces.FaceBox(100.5f, 50f, 80f, 96f));
         face.DetScore.Should().BeApproximately(0.87f, 1e-4f);
         face.FacePx.Should().Be(80);
         face.Pose.Yaw.Should().Be(-12.5f);

@@ -74,12 +74,69 @@ src/app/
 Lazy loading means guests on mobile data never download admin code. All HTTP calls use **relative URLs**
 (`/api/...`); nginx (Docker) or `proxy.conf.json` (`ng serve`) routes them to the API.
 
-## 4. Data flow *(Phase 1)*
+## 4. Data model (EF Core, `Infrastructure/Persistence/AppDbContext.cs`)
 
-Upload → IngestJob (hash, EXIF, orient) → ResizeJob (web + thumb) → FaceJob (face-service → Face rows with
-embeddings) → MatchNewFacesJob (pgvector search against guest selfies) → NotifyJob. See `AI-PIPELINE.md`.
+```
+Event ─┬─ Collection (Haldi, Mehendi, …)
+       ├─ Photo ── Face (box, landmarks, Embedding vector(512) ← HNSW index)
+       ├─ ShareLink (token, PIN hash, link type, download flags)
+       └─ Guest ─┬─ GuestReference (Embedding vector(512): selfies, confirmed faces)
+                 └─ GuestMatch (guest × photo, best face, score, Auto/Probable/Confirmed/Rejected)
+UploadSession (chunked upload in progress) · AuditLog
+```
+- `FaceSettings` (thresholds) is an **owned type**: stored as columns of the `Events` table.
+- Deleting an Event cascades to everything; the files are deleted from disk too.
+- Migrations live in `Infrastructure/Persistence/Migrations` and are applied automatically at API startup
+  (`DatabaseInitializer`), which also seeds a **Demo Wedding** with the 5 usual collections.
 
-## 5. Configuration
+## 5. Photo upload → processing
+
+```
+Browser ── POST /events/{id}/uploads ─────────► UploadSession (chunkSize 8 MB, totalChunks)
+        ── PUT  /uploads/{id}/chunks/{n} ×N ──► tmp/uploads/{id}/0000n.part   (any order, re-sendable)
+        ── GET  /uploads/{id} ────────────────► which chunks arrived  (resume after a dropped connection)
+        ── POST /uploads/{id}/complete ───────► join + SHA-256 → duplicate? → Photo row + original file
+                                                   │ Hangfire (Postgres-backed queue)
+                                                   ▼
+                        queue "default" ─ PhotoJobs.PrepareAsync      ~0.3 s
+                          HEIC→JPEG · EXIF date/camera · auto-orient · sRGB · strip metadata
+                          web.jpg 2048px q82 · thumb.jpg 400px q75          Status = Resized
+                                                   ▼
+                        queue "faces"   ─ PhotoJobs.DetectFacesAsync  ~0.4 s + 0.4 s/face
+                          web.jpg → face-service → filter (MinFaceSizePx, MinDetScore)
+                          → Face rows with embeddings                       Status = FacesDetected
+```
+- **Two queues** so thumbnails appear in ~1 s even while face detection is busy; `FACE_WORKERS` sets the
+  face pool size separately.
+- **Idempotent + retried**: re-running a job replaces the faces; Hangfire retries 3×, then the photo is
+  `Failed` with the error. Unreadable files fail immediately. "Reprocess" re-queues one photo.
+- **Duplicates**: unique index `(EventId, ContentHash)`; uploading the same file again returns `"duplicate"`.
+- The original file is kept byte-for-byte; web/thumb have **no EXIF/GPS** (guests never see locations).
+- Dashboard: `/hangfire` (admin only) shows queues, retries and failures.
+
+**Image library:** Magick.NET (ImageMagick, Apache 2.0) instead of the spec's ImageSharp. ImageSharp versions
+before 3.2.0 have high-severity decoder CVEs, and 3.2.0+ requires a registered licence key for Release builds.
+Magick.NET needs no key and also decodes HEIC.
+
+## 6. Auth & media
+
+| Who | How | Why |
+|---|---|---|
+| Admin | `POST /api/v1/auth/login` (ADMIN_EMAIL/PASSWORD from `.env`) → JWT in an **HttpOnly, SameSite=Strict cookie** `sl_admin` | JS can't read it (XSS-safe); works for `/hangfire` and plain download links |
+| Guest *(1b)* | link token (+PIN) → 30-day JWT sent as `Authorization: Bearer` | one browser may hold several event links |
+
+**Signed media URLs** — `/media/{photoId}/{thumb|web|original}?exp=…&sig=…`. The API only hands out a URL after
+checking the caller may see the photo; the HMAC-SHA256 signature (key `MEDIA_SIGNING_KEY`) stops anyone editing
+the photo id or variant. Expiry is rounded up to the next hour so URLs stay identical within an hour and the
+browser cache works (`Cache-Control: private, immutable`).
+
+## 7. Data flow *(Phase 1b / 2)*
+
+Selfie → `/v1/selfie` → GuestReference → pgvector search over Faces → GuestMatch (Auto / Probable).
+Phase 2 adds the reverse direction for new uploads (new Face → all GuestReferences) + notifications.
+See `AI-PIPELINE.md`.
+
+## 8. Configuration
 
 All secrets via `.env` → environment variables → ASP.NET Core configuration
 (`FaceService__BaseUrl` ⇒ `FaceService:BaseUrl`). `appsettings.json` holds only local-dev defaults.

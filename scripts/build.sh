@@ -9,7 +9,11 @@ step() { echo; echo "=== $1 ==="; }
 
 if [[ "$ONLY" == all || "$ONLY" == backend ]]; then
   step "backend: build + test (.NET 10)"
-  docker run --rm -v "$ROOT/backend:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
+  # Docker socket: Testcontainers starts a real Postgres next to the SDK container.
+  docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+    -e TESTCONTAINERS_HOST_OVERRIDE="${TESTCONTAINERS_HOST_OVERRIDE:-host.docker.internal}" \
+    --add-host=host.docker.internal:host-gateway \
+    -v "$ROOT/backend:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
     bash -c 'dotnet build ShaadiLens.sln -c Release -nologo && dotnet test ShaadiLens.sln -c Release --no-build -nologo'
 fi
 

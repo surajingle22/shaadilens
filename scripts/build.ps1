@@ -23,7 +23,9 @@ function Invoke-Step([string]$name, [scriptblock]$block) {
 
 if ($Only -in 'all', 'backend') {
     Invoke-Step 'backend: build + test (.NET 10)' {
-        docker run --rm -v "${root}/backend:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 `
+        # Docker socket + host override: Testcontainers starts a real Postgres next to the SDK container.
+        docker run --rm -v //var/run/docker.sock:/var/run/docker.sock -e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal `
+            -v "${root}/backend:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 `
             bash -c 'dotnet build ShaadiLens.sln -c Release -nologo && dotnet test ShaadiLens.sln -c Release --no-build -nologo'
     }
 }

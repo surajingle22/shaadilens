@@ -8,3 +8,4 @@ Dockerfile text eol=lf
 *.ps1 text eol=crlf
 *.jpg binary
 *.png binary
+*.heic binary

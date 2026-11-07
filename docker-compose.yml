@@ -50,6 +50,12 @@ services:
       FaceService__BaseUrl: ${FACE_SERVICE_URL:-http://face-service:8000}
       Storage__Root: ${STORAGE_ROOT:-/data/photos}
       App__PublicBaseUrl: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      Admin__Email: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      Admin__Password: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      Jwt__Secret: ${JWT_SECRET:?Set JWT_SECRET in .env (64 random chars)}
+      Media__SigningKey: ${MEDIA_SIGNING_KEY:?Set MEDIA_SIGNING_KEY in .env (64 random chars)}
+      Processing__FaceWorkers: ${FACE_WORKERS:-3}
+      Uploads__MaxFileSizeMb: ${MAX_UPLOAD_MB:-50}
     volumes:
       - photos:/data/photos
     depends_on:
