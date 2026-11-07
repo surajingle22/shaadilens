@@ -1,0 +1,33 @@
+<section class="status">
+  <header>
+    <h2>System status</h2>
+    <button mat-icon-button (click)="reload()" aria-label="Refresh status">
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </header>
+
+  <ul>
+    <li>
+      @if (ping.isLoading()) {
+        <mat-icon class="pending">hourglass_empty</mat-icon> API: checking…
+      } @else if (ping.hasValue()) {
+        <mat-icon class="ok">check_circle</mat-icon>
+        API connected <small>({{ ping.value().environment }})</small>
+      } @else {
+        <mat-icon class="bad">error</mat-icon> API unreachable
+      }
+    </li>
+
+    @for (check of checks(); track check.name) {
+      <li>
+        <mat-icon [class]="check.status === 'Healthy' ? 'ok' : 'bad'">
+          {{ check.status === 'Healthy' ? 'check_circle' : 'error' }}
+        </mat-icon>
+        {{ check.name }}: {{ check.status }}
+        @if (check.description) {
+          <small>— {{ check.description }}</small>
+        }
+      </li>
+    }
+  </ul>
+</section>

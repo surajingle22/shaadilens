@@ -1,0 +1,33 @@
+// Angular Material 3 theme. mat.theme() emits CSS variables (--mat-sys-primary, …)
+// that components and our own styles use. Rose/orange = warm wedding palette;
+// per-event theme colours (Phase 2) will override these variables at runtime.
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$rose-palette,
+        tertiary: mat.$orange-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+body {
+  color-scheme: light;
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+  height: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}

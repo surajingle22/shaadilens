@@ -1,0 +1,79 @@
+# ShaadiLens — self-hosted wedding photo sharing.
+# Usage:  copy .env.example .env  ->  edit secrets  ->  docker compose up --build
+# Dev host ports for api/face-service/postgres live in docker-compose.override.yml
+# (loaded automatically). For "production": docker compose -f docker-compose.yml up -d
+
+name: shaadilens
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16          # Postgres 16 with the pgvector extension pre-installed
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-shaadilens}
+      POSTGRES_USER: ${POSTGRES_USER:-shaadilens}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro   # runs once on empty volume: CREATE EXTENSION vector
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  face-service:
+    build: ./face-service
+    image: shaadilens/face-service:dev
+    restart: unless-stopped
+    environment:
+      DET_SIZE: ${FACE_DET_SIZE:-640}       # detector input size (640x640)
+      MAX_SIDE: ${FACE_MAX_SIDE:-1600}      # downscale long edge before detection (speed)
+      OMP_NUM_THREADS: ${FACE_OMP_THREADS:-4}
+    expose:
+      - "8000"                              # internal network only
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s                     # model load takes a while on CPU
+
+  api:
+    build: ./backend
+    image: shaadilens/api:dev
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}   # Development = Swagger on
+      ASPNETCORE_HTTP_PORTS: "8080"
+      ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-shaadilens};Username=${POSTGRES_USER:-shaadilens};Password=${POSTGRES_PASSWORD}"
+      FaceService__BaseUrl: ${FACE_SERVICE_URL:-http://face-service:8000}
+      Storage__Root: ${STORAGE_ROOT:-/data/photos}
+      App__PublicBaseUrl: ${PUBLIC_BASE_URL:-http://localhost:8080}
+    volumes:
+      - photos:/data/photos
+    depends_on:
+      postgres:
+        condition: service_healthy
+      face-service:
+        condition: service_started          # /health reports it; don't block API start on model load
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  web:
+    build: ./frontend/shaadilens-web       # Angular build -> nginx (SPA + reverse proxy to api)
+    image: shaadilens/web:dev
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  photos:

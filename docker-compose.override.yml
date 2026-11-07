@@ -1,0 +1,9 @@
+# Dev-only: expose internal services on localhost for debugging (Swagger, curl, pgAdmin).
+# Loaded automatically by `docker compose up`. Skip it with `docker compose -f docker-compose.yml up`.
+services:
+  postgres:
+    ports: ["127.0.0.1:5433:5432"]
+  face-service:
+    ports: ["127.0.0.1:8000:8000"]
+  api:
+    ports: ["127.0.0.1:5080:8080"]

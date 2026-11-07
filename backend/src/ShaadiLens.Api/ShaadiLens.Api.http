@@ -1,0 +1,9 @@
+@api = http://localhost:5080
+
+GET {{api}}/api/v1/ping
+
+###
+GET {{api}}/health
+
+###
+GET {{api}}/api/v1/diagnostics/face-engine
