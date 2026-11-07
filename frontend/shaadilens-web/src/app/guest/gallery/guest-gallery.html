@@ -1,0 +1,82 @@
+<header class="top">
+  <div class="titles">
+    <span class="event">{{ session().event.name }}</span>
+    <h1>{{ isFull() ? 'All photos' : greeting() }}</h1>
+  </div>
+  <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="More options"><mat-icon>more_vert</mat-icon></button>
+  <mat-menu #menu="matMenu">
+    <a mat-menu-item [href]="whatsapp()" target="_blank" rel="noopener"><mat-icon>share</mat-icon> Share on WhatsApp</a>
+    @if (session().allowBulkDownload && total() > 0) {
+      <button mat-menu-item (click)="downloadAll()"><mat-icon>folder_zip</mat-icon> Download all{{ collectionId() ? ' in this tab' : '' }}</button>
+    }
+    @if (session().hasSelfie) {
+      <button mat-menu-item (click)="deleteMyData()"><mat-icon>delete</mat-icon> Delete my selfie &amp; data</button>
+    } @else {
+      <button mat-menu-item (click)="signOut()"><mat-icon>logout</mat-icon> Leave</button>
+    }
+  </mat-menu>
+</header>
+
+@if (!isFull()) {
+  <p class="summary">
+    @if (totalAll() > 0) {
+      We found <strong>{{ totalAll() }}</strong> photo{{ totalAll() === 1 ? '' : 's' }} of you.
+    } @else if (!collections.isLoading()) {
+      No photos of you yet. More photos are added during the event — check again later!
+    }
+  </p>
+  <div class="row-actions">
+    <button mat-stroked-button (click)="refresh()" [disabled]="refreshing()">
+      <mat-icon>{{ refreshing() ? 'hourglass_top' : 'refresh' }}</mat-icon> Check for new photos
+    </button>
+    @if (session().allowBulkDownload && total() > 0) {
+      <button mat-flat-button (click)="downloadAll()"><mat-icon>download</mat-icon> Download all</button>
+    }
+  </div>
+}
+
+<!-- Collection tabs -->
+@if ((collections.value() ?? []).length > 1) {
+  <mat-chip-listbox class="tabs" [value]="collectionId()" (change)="collectionId.set($event.value ?? null)" aria-label="Collections">
+    <mat-chip-option [value]="null" [selected]="collectionId() === null">All · {{ totalAll() }}</mat-chip-option>
+    @for (c of collections.value(); track c.id) {
+      <mat-chip-option [value]="c.id">{{ c.name }} · {{ c.photoCount }}</mat-chip-option>
+    }
+  </mat-chip-listbox>
+}
+
+<!-- "Might be you?" strip -->
+@if (!isFull() && (probable.value() ?? []).length && collectionId() === null) {
+  <section class="maybe">
+    <h2>Might be you?</h2>
+    <p class="hint">We’re not sure about these. Tap to have a look.</p>
+    <div class="strip">
+      @for (p of probable.value(); track p.id; let i = $index) {
+        <button class="thumb" (click)="open(probable.value()!, i)"><img [src]="p.thumbUrl" alt="Maybe you" loading="lazy" /></button>
+      }
+    </div>
+  </section>
+}
+
+@if (loading() && !photos().length) { <mat-progress-bar mode="indeterminate" /> }
+
+<div class="grid">
+  @for (p of photos(); track p.id; let i = $index) {
+    <button class="cell" (click)="open(photos(), i)" [attr.aria-label]="'Photo ' + (i + 1)">
+      <img [src]="p.thumbUrl" alt="" loading="lazy" />
+    </button>
+  }
+</div>
+
+<div #sentinel class="sentinel">
+  @if (loading() && photos().length) { <mat-progress-bar mode="indeterminate" /> }
+</div>
+
+<footer class="foot">
+  <p>Your selfie is used only to find your photos at this event.</p>
+</footer>
+
+@if (lightbox(); as lb) {
+  <app-lightbox [photos]="lb.list" [startIndex]="lb.index" [canDownload]="session().allowSingleDownload"
+                (closed)="lightbox.set(null)" (download)="download($event)" (nearEnd)="lb.list === photos() && loadMore()" />
+}

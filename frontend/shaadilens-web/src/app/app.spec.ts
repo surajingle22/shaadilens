@@ -32,10 +32,39 @@ describe('App routes', () => {
     expect(harness.routeNativeElement?.textContent).toContain('Events');
   });
 
-  it('shows the guest landing page with the link token', async () => {
-    const harness = await RouterTestingHarness.create('/g/abc123');
-    const text = harness.routeNativeElement?.textContent ?? '';
-    expect(text).toContain('Find your photos');
+  it('shows the guest landing page with the event from the link', async () => {
+    localStorage.clear();
+    const harnessPromise = RouterTestingHarness.create('/g/abc123');
+    await vi.waitFor(() =>
+      http.expectOne('/api/v1/public/links/abc123').flush({
+        event: { name: 'Suraj & Priya', date: '2026-12-12', venue: 'Pune', themeColor: '#b0004a', titleFont: null, coverUrl: null },
+        linkType: 'Guest', requiresPin: false, requireRegistration: true, registrationFields: 'Name',
+        selfieRequired: true, faceSearchEnabled: true,
+      }),
+    );
+    const harness = await harnessPromise;
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      const text = harness.routeNativeElement?.textContent ?? '';
+      expect(text).toContain('Suraj & Priya');
+      expect(text).toContain('Find your photos');
+    });
+  });
+
+  it('shows a friendly message for a closed gallery', async () => {
+    localStorage.clear();
+    const harnessPromise = RouterTestingHarness.create('/g/closed1');
+    await vi.waitFor(() =>
+      http.expectOne('/api/v1/public/links/closed1').flush(
+        { status: 403, detail: 'This gallery isn’t open right now. Please check with the couple.' },
+        { status: 403, statusText: 'Forbidden' },
+      ),
+    );
+    const harness = await harnessPromise;
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(harness.routeNativeElement?.textContent).toContain('check with the couple');
+    });
   });
 
   it('shows not-found for unknown routes', async () => {

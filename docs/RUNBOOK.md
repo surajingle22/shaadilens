@@ -1,6 +1,6 @@
 # Runbook
 
-> Filled in progressively. Phase 0 covers start/stop and troubleshooting.
+> Day-to-day operations: start/stop, troubleshooting, public access, backups.
 
 ## Start / stop
 
@@ -30,9 +30,52 @@ Production-style (no debug ports): `docker compose -f docker-compose.yml up -d`.
 | i5-8250U laptop (4C/8T), Docker Desktop, 2026-11-07 | ~410 ms | ~380 ms | ~2.9–3.4 s |
 
 Rule of thumb: `time ≈ 0.4 s + 0.38 s × faces`. 15,000 photos ≈ 6–10 h on this laptop (overnight).
-A faster desktop CPU is typically 2–3× quicker. Ideas if needed: batch embeddings per photo (Phase 1),
-`FACE_DET_SIZE=480` for close-up-heavy collections, GPU provider.
+A faster desktop CPU is typically 2–3× quicker. Batched embeddings (done in Phase 1) cut a 6-face photo to
+~2.2 s. Further ideas: `FACE_DET_SIZE=480` for close-up-heavy collections, GPU provider.
 
-## Backup / restore *(Phase 1)*
-## Cloudflare Tunnel *(Phase 1)*
-## Tuning thresholds *(Phase 2)*
+## Opening it to phones — Cloudflare Tunnel (free)
+
+Phones need **HTTPS** for the live selfie camera (on plain `http://192.168.x.x` they fall back to the phone's
+camera app, which still works). Cloudflare Tunnel gives you a public HTTPS address without opening router ports.
+
+**Quick test (no account, random address, changes each run):**
+```powershell
+winget install --id Cloudflare.cloudflared
+cloudflared tunnel --url http://localhost:8080
+# prints https://something-random.trycloudflare.com
+```
+Put that address in `.env` as `PUBLIC_BASE_URL=https://something-random.trycloudflare.com`, then
+`docker compose up -d api` so QR codes and posters use it. Re-print posters if the address changes.
+
+**For the wedding (fixed address, needs a free Cloudflare account + a domain on Cloudflare):**
+```powershell
+cloudflared tunnel login
+cloudflared tunnel create shaadilens
+cloudflared tunnel route dns shaadilens photos.yourdomain.com
+cloudflared tunnel run --url http://localhost:8080 shaadilens
+```
+Set `PUBLIC_BASE_URL=https://photos.yourdomain.com` and `ASPNETCORE_ENVIRONMENT=Production` (turns Swagger off).
+nginx passes Cloudflare's `X-Forwarded-Proto: https` through, so the admin cookie is marked Secure.
+
+## Backup / restore
+
+Everything lives in two Docker volumes: `shaadilens_pgdata` (database) and `shaadilens_photos` (files).
+
+```powershell
+mkdir backup
+# database (consistent dump while running)
+docker compose exec -T postgres pg_dump -U shaadilens -Fc shaadilens > backup\db.dump
+# photos + selfies
+docker run --rm -v shaadilens_photos:/data -v ${PWD}\backup:/backup alpine tar czf /backup/photos.tgz -C /data .
+```
+Restore on a fresh machine:
+```powershell
+docker compose up -d postgres
+docker compose exec -T postgres pg_restore -U shaadilens -d shaadilens --clean --if-exists < backup\db.dump
+docker run --rm -v shaadilens_photos:/data -v ${PWD}\backup:/backup alpine tar xzf /backup/photos.tgz -C /data
+docker compose up -d
+```
+
+## Tuning thresholds *(Phase 2: live preview)*
+Phase 1: Overview tab → Face matching. Raise **Match** if strangers show up in "Your photos"; lower **Probable**
+if people miss photos. Guests get the new result when they tap "Check for new photos" (admin: Guests → search icon).

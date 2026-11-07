@@ -1,0 +1,110 @@
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { MatchSummary, PagedResult, RegistrationFields, ShareLinkType } from './api.models';
+
+export interface EventBranding {
+  name: string;
+  date: string | null;
+  venue: string | null;
+  themeColor: string;
+  titleFont: string | null;
+  coverUrl: string | null;
+}
+
+export interface PublicLink {
+  event: EventBranding;
+  linkType: ShareLinkType;
+  requiresPin: boolean;
+  requireRegistration: boolean;
+  registrationFields: RegistrationFields;
+  selfieRequired: boolean;
+  faceSearchEnabled: boolean;
+}
+
+export interface GuestSessionInfo {
+  event: EventBranding;
+  linkType: ShareLinkType;
+  guestName: string | null;
+  hasSelfie: boolean;
+  allowSingleDownload: boolean;
+  allowBulkDownload: boolean;
+  matchCount: number;
+  probableCount: number;
+  lastSearchedAt: string | null;
+}
+
+export interface GuestPhoto {
+  id: string;
+  collectionId: string;
+  width: number;
+  height: number;
+  takenAt: string | null;
+  thumbUrl: string;
+  webUrl: string;
+}
+
+export interface GuestCollection {
+  id: string;
+  name: string;
+  photoCount: number;
+}
+
+export interface GuestLogin {
+  token: string;
+  expiresAt: string;
+  session: GuestSessionInfo;
+  matches: MatchSummary | null;
+}
+
+export interface RegisterForm {
+  name?: string;
+  phone?: string;
+  email?: string;
+  consent: boolean;
+  pinTicket?: string | null;
+  selfie?: Blob | null;
+}
+
+/** Guest endpoints. The guest JWT is added by the auth interceptor for /api/v1/public/*. */
+@Injectable({ providedIn: 'root' })
+export class GuestApi {
+  private readonly http = inject(HttpClient);
+  private readonly base = '/api/v1/public';
+
+  link = (token: string) => firstValueFrom(this.http.get<PublicLink>(`${this.base}/links/${token}`));
+
+  verifyPin = (token: string, pin: string) =>
+    firstValueFrom(this.http.post<{ pinTicket: string }>(`${this.base}/links/${token}/verify-pin`, { pin }));
+
+  register(token: string, f: RegisterForm): Promise<GuestLogin> {
+    const body = new FormData();
+    if (f.name) body.append('name', f.name);
+    if (f.phone) body.append('phone', f.phone);
+    if (f.email) body.append('email', f.email);
+    body.append('consent', String(f.consent));
+    if (f.pinTicket) body.append('pinTicket', f.pinTicket);
+    if (f.selfie) body.append('selfie', f.selfie, 'selfie.jpg');
+    return firstValueFrom(this.http.post<GuestLogin>(`${this.base}/links/${token}/register`, body));
+  }
+
+  me = () => firstValueFrom(this.http.get<GuestSessionInfo>(`${this.base}/me`));
+  collections = () => firstValueFrom(this.http.get<GuestCollection[]>(`${this.base}/collections`));
+  probable = () => firstValueFrom(this.http.get<GuestPhoto[]>(`${this.base}/me/probable`));
+  refresh = () => firstValueFrom(this.http.post<MatchSummary>(`${this.base}/me/refresh`, {}));
+  deleteMe = () => firstValueFrom(this.http.delete<void>(`${this.base}/me`));
+
+  /** "Your photos" (Guest links) or the whole gallery (Full links). */
+  photos(kind: 'mine' | 'gallery', collectionId: string | null, page: number, pageSize = 60) {
+    let params = new HttpParams().set('page', page).set('pageSize', pageSize);
+    if (collectionId) params = params.set('collectionId', collectionId);
+    const url = kind === 'mine' ? `${this.base}/me/photos` : `${this.base}/gallery`;
+    return firstValueFrom(this.http.get<PagedResult<GuestPhoto>>(url, { params }));
+  }
+
+  downloadUrl = (photoId: string) =>
+    firstValueFrom(this.http.post<{ url: string }>(`${this.base}/photos/${photoId}/download`, {})).then((r) => r.url);
+
+  downloadAllUrl = (collectionId: string | null) =>
+    firstValueFrom(this.http.post<{ url: string }>(`${this.base}/me/download-all`, { collectionId })).then((r) => r.url);
+}
