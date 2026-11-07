@@ -1,0 +1,134 @@
+@if (ctx.event.value(); as ev) {
+  <!-- ---------- processing ---------- -->
+  <section class="panel">
+    <div class="row">
+      <h2>Photos</h2>
+      <mat-slide-toggle [checked]="ev.isPublished" (change)="togglePublish($event.checked)" [disabled]="saving()">
+        {{ ev.isPublished ? 'Published' : 'Not published' }}
+      </mat-slide-toggle>
+    </div>
+
+    @if (stats.value(); as s) {
+      <div class="stats">
+        <div><strong>{{ s.photos | number }}</strong><span>photos</span></div>
+        <div><strong>{{ s.processed | number }}</strong><span>processed</span></div>
+        <div><strong>{{ s.faces | number }}</strong><span>faces found</span></div>
+        <div><strong>{{ s.guests | number }}</strong><span>guests</span></div>
+        <div><strong>{{ s.matches | number }}</strong><span>guest matches</span></div>
+      </div>
+
+      @if (s.photos > 0) {
+        <mat-progress-bar mode="determinate" [value]="progress() * 100" />
+        <p class="muted small">
+          @if (s.pending > 0) {
+            Processing… {{ s.pending | number }} photo(s) waiting (thumbnails first, then face detection). This page updates by itself.
+          } @else {
+            All photos processed.
+          }
+          @if (s.failed > 0) {
+            <span class="error">{{ s.failed }} failed.</span>
+            <button mat-button (click)="retryFailed()"><mat-icon>replay</mat-icon> Retry failed</button>
+          }
+        </p>
+      } @else {
+        <p class="muted">No photos yet — go to <strong>Upload</strong>.</p>
+      }
+    }
+  </section>
+
+  <div class="two-col">
+    <!-- ---------- details ---------- -->
+    <form class="panel" [formGroup]="form" (ngSubmit)="saveDetails()">
+      <h2>Details</h2>
+      <mat-form-field appearance="outline">
+        <mat-label>Name</mat-label>
+        <input matInput formControlName="name" />
+      </mat-form-field>
+      <div class="inline">
+        <mat-form-field appearance="outline">
+          <mat-label>Date</mat-label>
+          <input matInput type="date" formControlName="date" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Venue</mat-label>
+          <input matInput formControlName="venue" />
+        </mat-form-field>
+      </div>
+      <div class="inline">
+        <label class="color">
+          <input type="color" formControlName="themeColor" />
+          <span>Theme colour</span>
+        </label>
+        <mat-form-field appearance="outline">
+          <mat-label>Gallery closes on</mat-label>
+          <input matInput type="date" formControlName="expiresAt" />
+          <mat-hint>Optional</mat-hint>
+        </mat-form-field>
+      </div>
+      <mat-checkbox formControlName="faceSearchEnabled">Face search (guests find photos with a selfie)</mat-checkbox>
+      @if (ev.coverUrl) {
+        <div class="cover"><img [src]="ev.coverUrl" alt="Cover photo" /><span class="muted small">Cover photo (change it from Photos)</span></div>
+      } @else {
+        <p class="muted small">Tip: pick a cover photo from the Photos tab — guests see it on the landing page.</p>
+      }
+      <div class="actions"><button mat-flat-button type="submit" [disabled]="form.invalid || form.pristine || saving()">Save</button></div>
+    </form>
+
+    <!-- ---------- collections ---------- -->
+    <section class="panel">
+      <h2>Collections</h2>
+      <p class="muted small">Drag to reorder. Hidden collections are invisible to guests.</p>
+      <ul cdkDropList (cdkDropListDropped)="drop($event)" class="collections">
+        @for (c of collections(); track c.id) {
+          <li cdkDrag [class.hidden]="c.isHidden">
+            <mat-icon cdkDragHandle class="handle">drag_indicator</mat-icon>
+            <input class="name" [value]="c.name" (change)="renameCollection(c, $any($event.target).value)" aria-label="Collection name" />
+            <span class="count">{{ c.photoCount }}</span>
+            <button mat-icon-button (click)="toggleHidden(c)" [matTooltip]="c.isHidden ? 'Show to guests' : 'Hide from guests'">
+              <mat-icon>{{ c.isHidden ? 'visibility_off' : 'visibility' }}</mat-icon>
+            </button>
+            <button mat-icon-button (click)="deleteCollection(c)" [disabled]="c.photoCount > 0"
+                    [matTooltip]="c.photoCount > 0 ? 'Only empty collections can be deleted' : 'Delete'">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </li>
+        }
+      </ul>
+      <div class="add">
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>New collection</mat-label>
+          <input matInput [ngModel]="newCollection()" (ngModelChange)="newCollection.set($event)" (keydown.enter)="addCollection()" placeholder="Cocktail party" />
+        </mat-form-field>
+        <button mat-stroked-button (click)="addCollection()" [disabled]="!newCollection().trim()">Add</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ---------- face matching ---------- -->
+  <form class="panel" [formGroup]="faces" (ngSubmit)="saveFaceSettings()">
+    <h2>Face matching</h2>
+    <p class="muted small">
+      Similarity is 0–1 (same person ≈ 0.45–0.8). At or above <strong>Match</strong> a photo goes to “Your photos”;
+      between <strong>Probable</strong> and Match it goes to “Might be you?”. Lower = more photos found but more mistakes.
+    </p>
+    <div class="inline wrap">
+      <mat-form-field appearance="outline"><mat-label>Match threshold</mat-label>
+        <input matInput type="number" step="0.01" formControlName="matchThreshold" /></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Probable threshold</mat-label>
+        <input matInput type="number" step="0.01" formControlName="probableThreshold" /></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Min face size (px)</mat-label>
+        <input matInput type="number" formControlName="minFaceSizePx" /></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Min detector score</mat-label>
+        <input matInput type="number" step="0.05" formControlName="minDetScore" /></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Max selfie turn (°)</mat-label>
+        <input matInput type="number" formControlName="maxSelfieYaw" /></mat-form-field>
+    </div>
+    <p class="muted small">Min face size / detector score apply to photos processed after saving (use Reprocess for old ones).</p>
+    <div class="actions"><button mat-stroked-button type="submit" [disabled]="faces.invalid || faces.pristine || saving()">Save thresholds</button></div>
+  </form>
+
+  <section class="panel danger">
+    <h2>Danger zone</h2>
+    <button mat-stroked-button color="warn" (click)="deleteEvent()"><mat-icon>delete_forever</mat-icon> Delete event</button>
+  </section>
+}

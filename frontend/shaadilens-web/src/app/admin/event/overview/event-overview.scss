@@ -1,0 +1,32 @@
+:host { display: flex; flex-direction: column; gap: 16px; }
+h2 { font: var(--mat-sys-title-medium); margin: 0 0 12px; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stats div { display: flex; flex-direction: column; }
+.stats strong { font: var(--mat-sys-headline-small); }
+.stats span { color: var(--mat-sys-on-surface-variant); font: var(--mat-sys-body-small); }
+.two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+form.panel, section.panel { display: flex; flex-direction: column; }
+.inline { display: flex; gap: 12px; }
+.inline > * { flex: 1; }
+.wrap { flex-wrap: wrap; }
+.wrap > * { flex: 1 1 160px; }
+.color { display: flex; align-items: center; gap: 8px; height: 56px; }
+.color input { width: 44px; height: 36px; border: none; background: none; padding: 0; }
+.cover { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+.cover img { width: 96px; height: 64px; object-fit: cover; border-radius: 8px; }
+.actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.collections { list-style: none; padding: 0; margin: 0 0 8px; }
+.collections li {
+  display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 8px;
+  background: var(--mat-sys-surface); margin-bottom: 4px;
+}
+.collections li.hidden .name { color: var(--mat-sys-on-surface-variant); text-decoration: line-through; }
+.handle { cursor: grab; color: var(--mat-sys-on-surface-variant); }
+.name { flex: 1; border: none; background: transparent; font: var(--mat-sys-body-large); color: inherit; padding: 8px 4px; }
+.name:focus { outline: 2px solid var(--mat-sys-primary); border-radius: 4px; }
+.count { color: var(--mat-sys-on-surface-variant); min-width: 32px; text-align: right; }
+.add { display: flex; gap: 8px; align-items: baseline; }
+.grow { flex: 1; }
+.error { color: var(--mat-sys-error); }
+.danger h2 { color: var(--mat-sys-error); }

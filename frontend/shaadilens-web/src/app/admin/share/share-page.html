@@ -1,0 +1,100 @@
+@if (ctx.event.value(); as ev) {
+  @if (!ev.isPublished) {
+    <p class="panel warn"><mat-icon>info</mat-icon> This event isn’t published yet — links won’t open for guests until you publish it on the Overview tab.</p>
+  }
+}
+
+<header class="page-header">
+  <h2>Share links</h2>
+  <button mat-flat-button (click)="creating.set(!creating())"><mat-icon>add_link</mat-icon> New link</button>
+</header>
+
+@if (creating()) {
+  <form class="panel create" [formGroup]="form" (ngSubmit)="create()">
+    <div class="inline">
+      <mat-form-field appearance="outline">
+        <mat-label>Type</mat-label>
+        <mat-select formControlName="type">
+          <mat-option value="Guest">Guest — selfie, sees only their photos</mat-option>
+          <mat-option value="Full">Full gallery — sees all photos</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Label (for you)</mat-label>
+        <input matInput formControlName="label" placeholder="Table cards QR" />
+      </mat-form-field>
+    </div>
+    <div class="checks">
+      <mat-checkbox formControlName="requireRegistration">Ask guests to fill a form</mat-checkbox>
+      @if (form.controls.requireRegistration.value) {
+        <span class="sub">
+          <mat-checkbox formControlName="askName">Name</mat-checkbox>
+          <mat-checkbox formControlName="askPhone">Phone</mat-checkbox>
+          <mat-checkbox formControlName="askEmail">Email</mat-checkbox>
+        </span>
+      }
+      <mat-checkbox formControlName="allowSingleDownload">Allow downloading photos</mat-checkbox>
+      <mat-checkbox formControlName="allowBulkDownload">Allow “Download all” (ZIP)</mat-checkbox>
+      <mat-checkbox formControlName="withPin">Protect with a 6-digit PIN</mat-checkbox>
+    </div>
+    <div class="actions"><button mat-flat-button type="submit">Create link</button></div>
+  </form>
+}
+
+@if (links.isLoading() && !links.hasValue()) { <mat-progress-bar mode="indeterminate" /> }
+
+<div class="links">
+  @for (link of links.value() ?? []; track link.id) {
+    <article class="panel link" [class.inactive]="!link.isActive">
+      <img class="qr" [src]="urls.qr(link.id)" alt="QR code" loading="lazy" />
+      <div class="main">
+        <h3>
+          <mat-icon>{{ link.type === 'Guest' ? 'face' : 'photo_library' }}</mat-icon>
+          {{ link.label || (link.type === 'Guest' ? 'Guest link' : 'Full gallery link') }}
+          <span class="muted small">· {{ link.guestCount }} guest(s)</span>
+        </h3>
+        <div class="url">
+          <code>{{ link.url }}</code>
+          <button mat-icon-button (click)="copy(link.url)" matTooltip="Copy link"><mat-icon>content_copy</mat-icon></button>
+          <a mat-icon-button [href]="link.url" target="_blank" rel="noopener" matTooltip="Open as a guest"><mat-icon>open_in_new</mat-icon></a>
+          <a mat-icon-button [href]="whatsapp(link)" target="_blank" rel="noopener" matTooltip="Share on WhatsApp"><mat-icon>chat</mat-icon></a>
+        </div>
+        <p class="muted small">
+          {{ link.type === 'Guest' ? 'Selfie + ' : '' }}{{ fields(link) }} ·
+          {{ link.allowSingleDownload ? (link.allowBulkDownload ? 'downloads + ZIP' : 'downloads') : 'no downloads' }} ·
+          {{ link.hasPin ? 'PIN protected' : 'no PIN' }}
+        </p>
+
+        @if (revealedPin()?.linkId === link.id) {
+          <p class="pin">PIN: <strong>{{ revealedPin()!.pin }}</strong>
+            <button mat-icon-button (click)="copy(revealedPin()!.pin, 'PIN')" matTooltip="Copy PIN"><mat-icon>content_copy</mat-icon></button>
+            <span class="muted small">Shown only now — print it on the table card.</span>
+          </p>
+        }
+
+        <div class="buttons">
+          <a mat-stroked-button [href]="urls.poster(link.id, 'a4')" download><mat-icon>print</mat-icon> Poster A4</a>
+          <a mat-stroked-button [href]="urls.poster(link.id, 'a5')" download><mat-icon>print</mat-icon> A5</a>
+          <a mat-stroked-button [href]="urls.qr(link.id)" download="qr.png"><mat-icon>qr_code_2</mat-icon> QR PNG</a>
+          <button mat-stroked-button [matMenuTriggerFor]="more"><mat-icon>tune</mat-icon> Settings</button>
+          <mat-menu #more="matMenu">
+            <button mat-menu-item (click)="toggle(link, 'isActive', !link.isActive)">
+              <mat-icon>{{ link.isActive ? 'link_off' : 'link' }}</mat-icon>{{ link.isActive ? 'Turn link off' : 'Turn link on' }}</button>
+            <button mat-menu-item (click)="toggle(link, 'allowSingleDownload', !link.allowSingleDownload)">
+              <mat-icon>download</mat-icon>{{ link.allowSingleDownload ? 'Disable downloads' : 'Enable downloads' }}</button>
+            <button mat-menu-item (click)="toggle(link, 'allowBulkDownload', !link.allowBulkDownload)">
+              <mat-icon>folder_zip</mat-icon>{{ link.allowBulkDownload ? 'Disable Download all' : 'Enable Download all' }}</button>
+            <button mat-menu-item (click)="pin(link, 'generate')"><mat-icon>pin</mat-icon>{{ link.hasPin ? 'New PIN' : 'Add PIN' }}</button>
+            @if (link.hasPin) {
+              <button mat-menu-item (click)="pin(link, 'remove')"><mat-icon>lock_open</mat-icon>Remove PIN</button>
+            }
+            <button mat-menu-item (click)="remove(link)"><mat-icon>delete</mat-icon>Delete link</button>
+          </mat-menu>
+        </div>
+        @if (!link.isActive) { <p class="error small">This link is turned off.</p> }
+      </div>
+    </article>
+  } @empty {
+    @if (links.hasValue()) { <p class="muted">No links yet. Create a Guest link and print its poster for the venue.</p> }
+  }
+</div>

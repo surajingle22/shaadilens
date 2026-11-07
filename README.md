@@ -6,7 +6,7 @@ Runs entirely on one machine with Docker Compose — no paid APIs, no cloud AI.
 > **Privacy note:** face embeddings are biometric data. This app is meant for a private family event:
 > guests give explicit consent, can delete their data at any time, and data is purged when the event expires.
 
-**Status:** Phase 1 in progress (1a data + upload pipeline, 1b guest API done; Angular UI next) — see [docs/SPEC.md](docs/SPEC.md) §12.
+**Status:** Phase 1 in progress (1a–1c: backend + admin UI done; guest UI next) — see [docs/SPEC.md](docs/SPEC.md) §12.
 
 ## Stack
 .NET 10 · EF Core + PostgreSQL 16 + pgvector · Hangfire · Magick.NET · Python FastAPI + InsightFace (`buffalo_l`, CPU) · Angular 22 + Material · nginx · Docker Compose

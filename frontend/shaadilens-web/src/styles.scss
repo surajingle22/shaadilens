@@ -31,3 +31,42 @@ body {
 *::after {
   box-sizing: border-box;
 }
+
+// ---------- shared admin layout helpers ----------
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 8px 0 16px;
+
+  h1 {
+    font: var(--mat-sys-headline-small);
+    margin: 0;
+  }
+}
+
+.panel {
+  background: var(--mat-sys-surface-container-low);
+  border-radius: var(--mat-sys-corner-large);
+  padding: 16px 20px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.mat-icon {
+  vertical-align: middle;
+}

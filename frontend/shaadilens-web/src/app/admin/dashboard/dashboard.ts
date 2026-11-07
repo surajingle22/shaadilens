@@ -5,13 +5,8 @@ import { ApiStatus } from '../../shared/api-status/api-status';
   selector: 'app-dashboard',
   imports: [ApiStatus],
   template: `
-    <h1>Dashboard</h1>
-    <p class="hint">Events, uploads and processing progress arrive in Phase 1.</p>
+    <header class="page-header"><h1>System status</h1></header>
     <app-api-status />
-  `,
-  styles: `
-    h1 { font: var(--mat-sys-headline-small); }
-    .hint { color: var(--mat-sys-on-surface-variant); }
   `,
 })
 export class Dashboard {}
