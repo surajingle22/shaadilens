@@ -123,16 +123,40 @@ Magick.NET needs no key and also decodes HEIC.
 | Who | How | Why |
 |---|---|---|
 | Admin | `POST /api/v1/auth/login` (ADMIN_EMAIL/PASSWORD from `.env`) → JWT in an **HttpOnly, SameSite=Strict cookie** `sl_admin` | JS can't read it (XSS-safe); works for `/hangfire` and plain download links |
-| Guest *(1b)* | link token (+PIN) → 30-day JWT sent as `Authorization: Bearer` | one browser may hold several event links |
+| Guest | link token (+PIN) → register → 30-day JWT (`eid`, `lid`, `gid`, `ltype` claims) sent as `Authorization: Bearer` | one browser may hold several event links |
+| Tickets | short JWTs with their own audience: "PIN entered" (2 h), "may download this ZIP" (10 min) | plain links/forms can't carry a Bearer header; a ticket can never be used as a login |
+
+**Guest permission rule** (`GuestAccessService`): Guest links see only photos they're matched in; Full links see
+every *visible* photo (event published, link active & unexpired, photo processed, photo + collection not hidden).
+This is re-checked on every request, so closing a link or "Delete my data" ends existing sessions immediately.
+
+**PIN brute force**: 5 *wrong* PINs per IP per link → 15-minute block (`PinAttemptLimiter`). Counting only failures
+matters at a wedding: hundreds of guests share the venue Wi-Fi's single IP and the same QR code. PINs are stored
+as PBKDF2 hashes, so the admin sees a PIN only once (when generated) and can regenerate it.
 
 **Signed media URLs** — `/media/{photoId}/{thumb|web|original}?exp=…&sig=…`. The API only hands out a URL after
 checking the caller may see the photo; the HMAC-SHA256 signature (key `MEDIA_SIGNING_KEY`) stops anyone editing
 the photo id or variant. Expiry is rounded up to the next hour so URLs stay identical within an hour and the
 browser cache works (`Cache-Control: private, immutable`).
 
-## 7. Data flow *(Phase 1b / 2)*
+## 7. Guest flow
 
-Selfie → `/v1/selfie` → GuestReference → pgvector search over Faces → GuestMatch (Auto / Probable).
+```
+QR → /g/{token} ─ GET  /public/links/{token}               branding, PIN?, fields, selfie needed?
+               ─ POST /public/links/{token}/verify-pin     → PIN ticket
+               ─ POST /public/links/{token}/register       form + consent + selfie (multipart)
+                    selfie → normalise (Magick) → face-service /v1/selfie → 422 "Move closer" …
+                    → Guest + GuestReference + selfie file → pgvector search → GuestMatch rows
+                    ← guest JWT
+               ─ GET  /public/me, /me/photos, /me/probable, /collections, /gallery (Full links)
+               ─ POST /public/me/refresh                   "Check for new photos"
+               ─ POST /public/photos/{id}/download         → signed original URL
+               ─ POST /public/me/download-all → GET /public/zip?ticket=…   streamed ZIP (no temp files)
+               ─ DELETE /public/me                         guest, selfie file, embeddings, matches
+```
+Admin: `/events/{id}/share-links` (Guest + Full in Phase 1), `/share-links/{id}/pin`, `qr.png`, `poster.png?size=a4|a5`
+(rendered with bundled OFL fonts), `/events/{id}/guests`, `PUT /events/{id}/cover`.
+
 Phase 2 adds the reverse direction for new uploads (new Face → all GuestReferences) + notifications.
 See `AI-PIPELINE.md`.
 

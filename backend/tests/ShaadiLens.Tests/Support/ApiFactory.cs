@@ -91,8 +91,31 @@ public sealed class FakeFaceEngine : IFaceEngine
         return Task.FromResult(new FaceAnalysisResult(2048, 1365, NextFaces, 12.3));
     }
 
+    /// <summary>What the next selfie check returns (set by tests).</summary>
+    public SelfieCheck NextSelfie { get; set; } = new(false, "no_face", "No face", null);
+
+    public Task<SelfieCheck> CheckSelfieAsync(Stream image, float maxYaw, CancellationToken ct = default) =>
+        Task.FromResult(NextSelfie);
+
+    public static SelfieCheck GoodSelfie(float[] embedding) => new(true, "ok", null, embedding);
+
     public Task<FaceEngineInfo> GetInfoAsync(CancellationToken ct = default) =>
         Task.FromResult(new FaceEngineInfo("fake", "0", "0", ["cpu"], 640, 1600, 512));
+
+    /// <summary>
+    /// Unit vector whose cosine similarity with axis <paramref name="axis"/> is exactly <paramref name="similarity"/>
+    /// (the rest points along <paramref name="otherAxis"/>). Lets tests place faces precisely around the thresholds.
+    /// </summary>
+    public static float[] WithSimilarity(int axis, float similarity, int otherAxis)
+    {
+        var v = new float[512];
+        v[axis] = similarity;
+        v[otherAxis] = MathF.Sqrt(1 - similarity * similarity);
+        return v;
+    }
+
+    public static DetectedFace FaceWith(float[] embedding, float x = 100) =>
+        Face(0, x: x) with { Embedding = embedding };
 
     /// <summary>A face with a deterministic unit-length embedding pointing mostly along axis <paramref name="axis"/>.</summary>
     public static DetectedFace Face(int axis, float sizePx = 120, float detScore = 0.9f, float x = 100, float y = 100) =>

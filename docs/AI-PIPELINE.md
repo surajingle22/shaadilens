@@ -56,6 +56,9 @@ Plus our own quality signal:
 - Images larger than `MAX_SIDE` (1600 px) are downscaled before detection. The detector runs at 640×640
   anyway; this just saves time. Boxes are scaled back so they're in **original** image coordinates.
 - Gender/age and 106-point landmark models in `buffalo_l` are **not loaded**.
+- **Batched embeddings**: InsightFace's `FaceAnalysis.get()` runs ArcFace once per face. We align all faces
+  first and run ArcFace **once** on the whole batch (`engine._detect_and_embed`). Same vectors (test checks
+  cosine > 0.999), ~35% faster on a 6-face group photo (3.4 s → 2.2 s on an i5-8250U).
 
 ### API
 `POST /v1/analyze` (multipart `file`) →
@@ -75,6 +78,22 @@ Plus our own quality signal:
 ```
 Faces are sorted largest first.
 
+### Selfie check — `POST /v1/selfie`
+A selfie becomes the guest's **reference**: every wedding photo is compared against it, so a bad selfie means
+missed or wrong matches. face-service rejects it early with a message the guest can act on:
+
+| Check (on the largest face) | Rule (env var) | Message |
+|---|---|---|
+| any face at all | — | "We couldn't find a face…" |
+| one person | 2nd face ≥ 60% of the 1st's size → reject | "Only one face please…" |
+| big enough | `face_px ≥ 80` (`SELFIE_MIN_FACE_PX`) | "Move closer…" |
+| detector confident | `det_score ≥ 0.7` | "Try better light and remove sunglasses." |
+| frontal | `|yaw| ≤ MaxSelfieYaw` (event setting, 30°) | "Look straight at the camera." |
+| sharp | blur ≥ 20 (`SELFIE_MIN_BLUR`) | "Too dark or blurry…" |
+
+The API answers 422 with `{code, detail}` so the guest page can show the message and let them retry.
+Before analysis, the .NET side normalises the selfie (upright, sRGB, ≤1280 px, metadata stripped).
+
 ## 3. Why matches sometimes fail (and what we do about it)
 
 | Problem | Why | Mitigation |
@@ -89,15 +108,41 @@ Faces are sorted largest first.
 confirmed matches). We search with **each** and keep the **max** similarity per face. A haldi-yellow
 side-profile might be far from the selfie but close to a confirmed haldi photo.
 
-## 4. Where it lives *(Phase 1+)*
+## 4. Selfie search (`Infrastructure/Matching/PgvectorFaceMatcher.cs`)
+
+```sql
+-- for each of the guest's reference embeddings:
+SELECT id, photo_id, embedding <=> @ref AS distance
+FROM   "Faces"
+WHERE  event_id = @event AND embedding <=> @ref <= 1 - ProbableThreshold   -- i.e. similarity ≥ 0.34
+```
+1. Per face, keep the **best** similarity over all references (query expansion).
+2. Per photo, keep the best face → one `GuestMatch` row per guest × photo. A group photo gets a row for
+   **every** guest found in it.
+3. similarity ≥ `MatchThreshold` (0.42) → **Auto** ("Your photos"); otherwise → **Probable** ("Might be you?").
+4. The guest's own decisions win: **Confirmed** / **Rejected** rows are never touched by a re-search.
+5. Auto/Probable rows that no longer qualify (e.g. admin raised the threshold) are removed.
+
+Runs right after registration (~0.4 s) and again when the guest taps **Check for new photos**.
+
+**Exact scan, not the HNSW index.** HNSW is *approximate*: combined with a `WHERE event_id = …` filter it can
+silently return fewer neighbours than exist. Comparing a selfie with every face of one wedding (≤ ~100k
+faces) is a plain sequential scan of a few tens of milliseconds and never misses a match — the better trade-off
+here. The HNSW indexes are kept for "nearest N" queries (`ORDER BY … LIMIT`) such as the People view.
+
+**Real result** (sample group photo, 6 people, uploaded twice; selfie = one guest cropped & enlarged):
+2 Auto matches (both copies), 0 false positives — the closest *other* person scored 0.196.
+
+## 5. Where it lives
 
 - `Face.Embedding vector(512)` and `GuestReference.Embedding vector(512)` in Postgres.
-- HNSW index (`vector_cosine_ops`) makes "top 2000 nearest faces among 50,000" take milliseconds.
-- **Forward search** (new selfie → all faces) and **reverse search** (new face → all guest selfies) use the same math.
+- **Forward search** (new selfie → all faces, Phase 1) and **reverse search** (new face → all guest
+  references, Phase 2) use the same math.
 
-## 5. Try it yourself (Phase 0)
+## 6. Try it yourself
 
 ```powershell
 curl.exe -F "file=@C:\path\to\photo.jpg" http://localhost:8000/v1/analyze
 ```
-or in Swagger: `POST /api/v1/diagnostics/face-analyze` (shows the summary without the 512 numbers).
+or in Swagger (log in as admin first): `POST /api/v1/diagnostics/face-analyze` (summary without the 512 numbers).
+Test a selfie: `curl.exe -F "file=@selfie.jpg" http://localhost:8000/v1/selfie`

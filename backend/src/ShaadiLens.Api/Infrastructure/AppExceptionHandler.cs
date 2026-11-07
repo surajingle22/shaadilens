@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using ShaadiLens.Application.Common;
+using ShaadiLens.Application.Guests;
 
 namespace ShaadiLens.Api.Infrastructure;
 
@@ -9,6 +10,15 @@ public sealed class AppExceptionHandler(IProblemDetailsService problemDetails) :
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken ct)
     {
+        // Selfie not usable → 422 with a machine-readable code the UI can react to (e.g. "too_small").
+        if (exception is SelfieRejectedException selfie)
+        {
+            context.Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+            var pd = new ProblemDetails { Status = 422, Title = "Selfie not usable", Detail = selfie.Message };
+            pd.Extensions["code"] = selfie.Code;
+            return await problemDetails.TryWriteAsync(new ProblemDetailsContext { HttpContext = context, ProblemDetails = pd });
+        }
+
         var (status, title) = exception switch
         {
             NotFoundException => (StatusCodes.Status404NotFound, "Not found"),

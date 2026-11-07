@@ -7,7 +7,7 @@ using ShaadiLens.Domain.Enums;
 namespace ShaadiLens.Application.Events;
 
 /// <summary>Admin use cases for events and their collections.</summary>
-public sealed class EventService(IAppDbContext db, IStorageService storage)
+public sealed class EventService(IAppDbContext db, IStorageService storage, IMediaUrlSigner urls)
 {
     public static readonly string[] DefaultCollections = ["Haldi", "Mehendi", "Sangeet", "Wedding", "Reception"];
 
@@ -54,6 +54,16 @@ public sealed class EventService(IAppDbContext db, IStorageService storage)
     {
         var ev = await FindAsync(id, ct);
         ev.IsPublished = published;
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Use one of the event's photos as the cover (null = no cover).</summary>
+    public async Task SetCoverAsync(Guid id, Guid? photoId, CancellationToken ct)
+    {
+        var ev = await FindAsync(id, ct);
+        if (photoId is { } pid && !await db.Photos.AnyAsync(p => p.Id == pid && p.EventId == id && p.StorageKeyWeb != null, ct))
+            throw new BadRequestException("Cover must be a processed photo of this event");
+        ev.CoverPhotoId = photoId;
         await db.SaveChangesAsync(ct);
     }
 
@@ -180,7 +190,8 @@ public sealed class EventService(IAppDbContext db, IStorageService storage)
             .Select(c => new CollectionDto(c.Id, c.Name, c.SortOrder, c.IsHidden, db.Photos.Count(p => p.CollectionId == c.Id)))
             .ToListAsync(ct);
         return new EventDto(ev.Id, ev.Name, ev.Slug, ev.Date, ev.Venue, ev.ThemeColor, ev.TitleFont,
-            ev.WatermarkEnabled, ev.WatermarkText, ev.IsPublished, ev.FaceSearchEnabled, ev.ExpiresAt, ev.CreatedAt,
+            ev.WatermarkEnabled, ev.WatermarkText, ev.IsPublished, ev.FaceSearchEnabled, ev.CoverPhotoId,
+            ev.CoverPhotoId is { } cover ? urls.GetUrl(cover, PhotoVariant.Web) : null, ev.ExpiresAt, ev.CreatedAt,
             FaceSettingsDto.From(ev.FaceSettings), collections);
     }
 }

@@ -10,6 +10,8 @@ public class Event
     public DateOnly? Date { get; set; }
     public string? Venue { get; set; }
     public string? CoverImageKey { get; set; }
+    /// <summary>One of the event's photos used as the cover on the guest landing page.</summary>
+    public Guid? CoverPhotoId { get; set; }
     public string ThemeColor { get; set; } = "#b0004a";
     public string? TitleFont { get; set; }
     public bool WatermarkEnabled { get; set; }

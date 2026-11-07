@@ -33,6 +33,8 @@ import insightface
 import numpy as np
 import onnxruntime
 from insightface.app import FaceAnalysis
+from insightface.app.common import Face
+from insightface.utils import face_align
 
 from .quality import blur_score
 
@@ -82,7 +84,7 @@ class FaceEngine:
             scale = self.max_side / max(h, w)
             work = cv2.resize(img_bgr, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
 
-        faces = self._app.get(work)
+        faces = self._detect_and_embed(work)
 
         out = []
         for f in faces:
@@ -108,3 +110,29 @@ class FaceEngine:
         # Biggest faces first — handy for selfies and for "main subject" logic.
         out.sort(key=lambda f: f["face_px"], reverse=True)
         return {"width": w, "height": h, "faces": out}
+
+    def _detect_and_embed(self, img: np.ndarray) -> list[Face]:
+        """Same result as FaceAnalysis.get(), but embeds all faces in ONE batched model run.
+
+        FaceAnalysis.get() calls the ArcFace model once per face. For a group photo with 15 faces that is
+        15 separate ONNX runs; batching them is noticeably faster on CPU.
+        """
+        bboxes, kpss = self._app.det_model.detect(img, max_num=0, metric="default")
+        faces = [Face(bbox=bboxes[i, 0:4], kps=kpss[i], det_score=bboxes[i, 4]) for i in range(bboxes.shape[0])]
+        if not faces:
+            return []
+
+        # Head pose (yaw/pitch/roll) — small model, run per face.
+        landmark_3d = self._app.models.get("landmark_3d_68")
+        if landmark_3d is not None:
+            for f in faces:
+                landmark_3d.get(img, f)
+
+        # Alignment: warp each face so the 5 keypoints land on fixed positions in a 112x112 crop,
+        # then embed all crops together.
+        rec = self._app.models["recognition"]
+        crops = [face_align.norm_crop(img, landmark=f.kps, image_size=rec.input_size[0]) for f in faces]
+        feats = rec.get_feat(crops)
+        for f, feat in zip(faces, feats):
+            f.embedding = feat.flatten()
+        return faces

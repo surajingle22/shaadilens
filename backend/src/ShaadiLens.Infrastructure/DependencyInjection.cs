@@ -7,7 +7,9 @@ using Microsoft.Extensions.Options;
 using ShaadiLens.Application.Abstractions;
 using ShaadiLens.Application.Faces;
 using ShaadiLens.Infrastructure.FaceService;
+using ShaadiLens.Infrastructure.Matching;
 using ShaadiLens.Infrastructure.Media;
+using ShaadiLens.Infrastructure.Sharing;
 using ShaadiLens.Infrastructure.Persistence;
 using ShaadiLens.Infrastructure.Processing;
 using ShaadiLens.Infrastructure.Storage;
@@ -50,6 +52,11 @@ public static class DependencyInjection
         services.AddSingleton<LocalDiskStorage>();
         services.AddSingleton<IStorageService>(sp => sp.GetRequiredService<LocalDiskStorage>());
         services.AddSingleton<IMediaUrlSigner, MediaUrlSigner>();
+
+        // ---- Sharing: face matching, selfie normalisation, QR + posters ----
+        services.AddScoped<IFaceMatcher, PgvectorFaceMatcher>();
+        services.AddSingleton<IImageTools, MagickImageTools>();
+        services.AddSingleton<IShareArtwork, ShareArtwork>();
 
         // ---- face-service client ----
         services.AddHttpClient<IFaceEngine, FaceServiceClient>(ConfigureFaceServiceClient);

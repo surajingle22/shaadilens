@@ -30,7 +30,8 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
-    INSIGHTFACE_ROOT=/opt/insightface
+    INSIGHTFACE_ROOT=/opt/insightface \
+    MPLCONFIGDIR=/tmp/matplotlib
 COPY --from=build /opt/venv /opt/venv
 COPY --from=models /models /opt/insightface/models
 

@@ -5,18 +5,21 @@ Endpoints:
   GET  /health       -> {"status": "ok"} once the model is loaded
   GET  /v1/info      -> model + runtime versions
   POST /v1/analyze   -> multipart "file": detect faces + 512-d embeddings
+  POST /v1/selfie    -> multipart "file" (+ optional "max_yaw"): validate a guest selfie
 """
 
 import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from dataclasses import replace
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 
 from .engine import FaceEngine
+from .selfie import SelfieRules, validate_selfie
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("face-service")
@@ -76,4 +79,15 @@ def analyze(request: Request, file: UploadFile = File(...)):
     # Never log embeddings or image content — only sizes and timings.
     log.info("analyze %dx%d -> %d faces in %.0f ms",
              result["width"], result["height"], len(result["faces"]), elapsed_ms)
+    return result
+
+
+@app.post("/v1/selfie")
+def selfie(request: Request, file: UploadFile = File(...), max_yaw: float | None = Form(None)):
+    """Analyze + validate a guest selfie. Always 200; `ok=false` comes with a human-friendly `reason`."""
+    img = decode_image(file.file.read())
+    analysis = _engine(request).analyze(img)
+    rules = SelfieRules() if max_yaw is None else replace(SelfieRules(), max_yaw=max_yaw)
+    result = validate_selfie(analysis, rules)
+    log.info("selfie %dx%d -> %d faces, %s", analysis["width"], analysis["height"], len(analysis["faces"]), result["code"])
     return result

@@ -97,6 +97,9 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.Property<string>("CoverImageKey")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("CoverPhotoId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

@@ -17,7 +17,7 @@ public sealed record EventSummaryDto(
 
 public sealed record EventDto(
     Guid Id, string Name, string Slug, DateOnly? Date, string? Venue, string ThemeColor, string? TitleFont,
-    bool WatermarkEnabled, string? WatermarkText, bool IsPublished, bool FaceSearchEnabled,
+    bool WatermarkEnabled, string? WatermarkText, bool IsPublished, bool FaceSearchEnabled, Guid? CoverPhotoId, string? CoverUrl,
     DateTimeOffset? ExpiresAt, DateTimeOffset CreatedAt, FaceSettingsDto FaceSettings,
     IReadOnlyList<CollectionDto> Collections);
 

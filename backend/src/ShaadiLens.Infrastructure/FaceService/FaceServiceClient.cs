@@ -31,6 +31,20 @@ public sealed class FaceServiceClient(HttpClient http) : IFaceEngine
                ?? throw new FaceServiceException("face-service returned an empty body");
     }
 
+    public async Task<SelfieCheck> CheckSelfieAsync(Stream image, float maxYaw, CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new StreamContent(image);
+        file.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        content.Add(file, "file", "selfie.jpg");
+        content.Add(new StringContent(maxYaw.ToString(System.Globalization.CultureInfo.InvariantCulture)), "max_yaw");
+
+        using var response = await http.PostAsync("v1/selfie", content, ct);
+        await EnsureSuccessAsync(response, ct);
+        return await response.Content.ReadFromJsonAsync<SelfieCheck>(Json, ct)
+               ?? throw new FaceServiceException("face-service returned an empty body");
+    }
+
     public async Task<FaceEngineInfo> GetInfoAsync(CancellationToken ct = default)
     {
         using var response = await http.GetAsync("v1/info", ct);

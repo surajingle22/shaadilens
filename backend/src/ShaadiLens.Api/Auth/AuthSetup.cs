@@ -9,6 +9,10 @@ namespace ShaadiLens.Api.Auth;
 public static class AuthSetup
 {
     public const string LoginRateLimit = "login";
+    public const string RegisterRateLimit = "register";
+    public const string RefreshRateLimit = "refresh";
+
+    public static string Ip(HttpContext http) => http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
     public static IServiceCollection AddAppAuth(this IServiceCollection services, IConfiguration config)
     {
@@ -51,13 +55,21 @@ public static class AuthSetup
             .AddPolicy(AuthConstants.AdminPolicy, p => p.RequireRole(AuthConstants.AdminRole))
             .AddPolicy(AuthConstants.GuestPolicy, p => p.RequireRole(AuthConstants.GuestRole));
 
+        services.AddSingleton<PinAttemptLimiter>();
         services.AddRateLimiter(o =>
         {
             o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            // 10 login attempts per 15 minutes per IP address.
+            // 10 admin login attempts per 15 minutes per IP address.
             o.AddPolicy(LoginRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(
-                http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(15) }));
+                Ip(http), _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(15) }));
+            // Selfie registration is CPU-heavy (face analysis). Generous per IP because a whole wedding
+            // can share one venue Wi-Fi IP, but enough to stop a script hammering face-service.
+            o.AddPolicy(RegisterRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(
+                Ip(http), _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+            // "Check for new photos": per guest.
+            o.AddPolicy(RefreshRateLimit, http => RateLimitPartition.GetFixedWindowLimiter(
+                http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? Ip(http),
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 6, Window = TimeSpan.FromMinutes(1) }));
         });
 
         return services;
