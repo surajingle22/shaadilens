@@ -84,6 +84,7 @@ public static class DependencyInjection
         services.AddScoped<PhotoJobs>();
         services.AddScoped<MatchJobs>();
         services.AddScoped<PurgeJobs>();
+        services.AddScoped<ClusterJobs>();
         services.AddScoped<IPhotoPipelineScheduler, HangfirePhotoPipelineScheduler>();
         services.AddHangfire(cfg => cfg
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)

@@ -316,3 +316,23 @@ export interface ProblemDetails {
   errors?: Record<string, string[]>;
   code?: string;
 }
+
+/** Admin → People: faces grouped by clustering. */
+export interface Person {
+  id: string;
+  number: number;
+  name: string | null;
+  guestId: string | null;
+  guestName: string | null;
+  faceCount: number;
+  photoCount: number;
+  samples: { photoId: string; thumbUrl: string; webUrl: string; width: number; height: number; face: { x: number; y: number; w: number; h: number } }[];
+}
+
+export interface People {
+  updatedAt: string | null;
+  running: boolean;
+  faces: number;
+  groupedFaces: number;
+  people: Person[];
+}

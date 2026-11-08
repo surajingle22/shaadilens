@@ -6,3 +6,5 @@ onnxruntime==1.20.1
 # insightface 0.7.3 is compiled against the NumPy 1.x ABI
 numpy==1.26.4
 opencv-python-headless==4.10.0.84
+# People clustering (DBSCAN); 1.5.x supports NumPy 1.26
+scikit-learn==1.5.2

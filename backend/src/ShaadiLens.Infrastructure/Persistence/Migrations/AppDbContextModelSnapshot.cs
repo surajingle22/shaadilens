@@ -94,6 +94,12 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("ClusteringStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ClustersUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("CoverImageKey")
                         .HasColumnType("text");
 
@@ -171,8 +177,8 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.Property<float>("BoxY")
                         .HasColumnType("real");
 
-                    b.Property<int?>("ClusterId")
-                        .HasColumnType("integer");
+                    b.Property<Guid?>("ClusterId")
+                        .HasColumnType("uuid");
 
                     b.Property<float>("DetScore")
                         .HasColumnType("real");
@@ -204,6 +210,8 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .HasColumnType("real");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClusterId");
 
                     b.HasIndex("Embedding");
 
@@ -354,6 +362,43 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.HasIndex("GuestId");
 
                     b.ToTable("GuestReferences");
+                });
+
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.PersonCluster", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FaceCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("GuestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PhotoCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestId");
+
+                    b.HasIndex("EventId", "Number");
+
+                    b.ToTable("PersonClusters");
                 });
 
             modelBuilder.Entity("ShaadiLens.Domain.Entities.Photo", b =>
@@ -642,6 +687,11 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ShaadiLens.Domain.Entities.Face", b =>
                 {
+                    b.HasOne("ShaadiLens.Domain.Entities.PersonCluster", null)
+                        .WithMany()
+                        .HasForeignKey("ClusterId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("ShaadiLens.Domain.Entities.Photo", "Photo")
                         .WithMany("Faces")
                         .HasForeignKey("PhotoId")
@@ -696,6 +746,20 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .HasForeignKey("GuestId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.PersonCluster", b =>
+                {
+                    b.HasOne("ShaadiLens.Domain.Entities.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShaadiLens.Domain.Entities.Guest", null)
+                        .WithMany()
+                        .HasForeignKey("GuestId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("ShaadiLens.Domain.Entities.Photo", b =>

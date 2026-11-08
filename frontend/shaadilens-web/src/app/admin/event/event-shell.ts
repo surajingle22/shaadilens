@@ -58,6 +58,7 @@ export class EventShell {
     { path: 'photos', label: 'Photos', icon: 'photo_library' },
     { path: 'share', label: 'Share', icon: 'qr_code_2' },
     { path: 'guests', label: 'Guests', icon: 'group' },
+    { path: 'people', label: 'People', icon: 'diversity_3' },
     { path: 'selections', label: 'Selections', icon: 'favorite' },
   ];
 

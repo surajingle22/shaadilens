@@ -207,6 +207,9 @@ public sealed class HangfirePhotoPipelineScheduler(IBackgroundJobClient jobs) : 
     public void EnqueueImageRebuild(Guid photoId) =>
         jobs.Enqueue<PhotoJobs>(j => j.RebuildImagesAsync(photoId, CancellationToken.None));
 
+    public void EnqueueClustering(Guid eventId, float eps, int minSamples) =>
+        jobs.Enqueue<ClusterJobs>(j => j.RunAsync(eventId, eps, minSamples, CancellationToken.None));
+
     public void EnqueueRematchEvent(Guid eventId) =>
         jobs.Enqueue<MatchJobs>(j => j.RematchEventAsync(eventId, CancellationToken.None));
 }

@@ -17,6 +17,7 @@ import {
   InitUploadResponse,
   MatchSummary,
   PagedResult,
+  People,
   Photo,
   PhotoDetail,
   PhotoStatus,
@@ -106,6 +107,11 @@ export class AdminApi {
     firstValueFrom(this.http.get(API.selectionExport(eventId, 'names', linkId), { responseType: 'text' }));
   unlockSelection = (linkId: string) => this.post<void>(API.selectionUnlock(linkId), {});
   rebuildImages = (eventId: string) => this.post<{ queued: number }>(API.rebuildImages(eventId), {});
+
+  // ---------- people (clusters) ----------
+  people = (eventId: string) => this.get<People>(API.people(eventId));
+  findPeople = (eventId: string) => this.post<void>(API.peopleRun(eventId), {});
+  updatePerson = (id: string, name: string | null, guestId: string | null) => this.put<void>(API.person(id), { name, guestId });
 
   // ---------- settings ----------
   settings = () => this.get<AppSettings>(API.settings);

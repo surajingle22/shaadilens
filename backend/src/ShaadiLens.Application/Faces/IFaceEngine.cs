@@ -19,6 +19,12 @@ public interface IFaceEngine
 
     /// <summary>Model / runtime information (for diagnostics).</summary>
     Task<FaceEngineInfo> GetInfoAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Group faces into people (DBSCAN on cosine distance). Returns one label per embedding, in the same order:
+    /// 0, 1, 2… = person number, -1 = no group (seen too rarely, or too blurry).
+    /// </summary>
+    Task<int[]> ClusterAsync(IReadOnlyList<float[]> embeddings, float eps, int minSamples, CancellationToken ct = default);
 }
 
 public sealed record SelfieCheck(bool Ok, string Code, string? Reason, float[]? Embedding);

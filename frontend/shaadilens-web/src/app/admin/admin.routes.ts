@@ -22,6 +22,7 @@ export const ADMIN_ROUTES: Routes = [
           { path: 'share', loadComponent: () => import('./share/share-page').then((m) => m.SharePage) },
           { path: 'guests', loadComponent: () => import('./guests/guests-page').then((m) => m.GuestsPage) },
           { path: 'guests/:guestId', loadComponent: () => import('./guests/match-review').then((m) => m.MatchReview) },
+          { path: 'people', loadComponent: () => import('./people/people-page').then((m) => m.PeoplePage) },
           { path: 'selections', loadComponent: () => import('./selections/selections-page').then((m) => m.SelectionsPage) },
         ],
       },

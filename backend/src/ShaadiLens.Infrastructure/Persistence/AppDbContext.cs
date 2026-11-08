@@ -21,6 +21,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UploadSession> UploadSessions => Set<UploadSession>();
     public DbSet<Selection> Selections => Set<Selection>();
     public DbSet<SelectionSubmission> SelectionSubmissions => Set<SelectionSubmission>();
+    public DbSet<PersonCluster> PersonClusters => Set<PersonCluster>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -84,6 +85,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
             e.Property(x => x.ImageKey).HasMaxLength(300);
             e.HasIndex(x => x.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
+        });
+
+        b.Entity<PersonCluster>(e =>
+        {
+            e.HasIndex(x => new { x.EventId, x.Number });
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Guest>().WithMany().HasForeignKey(x => x.GuestId).OnDelete(DeleteBehavior.SetNull);
+            // Faces point at their cluster; deleting clusters (re-run) just clears the pointer.
+            e.HasMany<Face>().WithOne().HasForeignKey(f => f.ClusterId).OnDelete(DeleteBehavior.SetNull);
         });
 
         b.Entity<Selection>(e =>

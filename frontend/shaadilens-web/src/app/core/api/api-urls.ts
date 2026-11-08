@@ -55,6 +55,10 @@ export const API = {
   selectionUnlock: (linkId: string) => `${v1}/share-links/${linkId}/selection/unlock`,
   rebuildImages: (eventId: string) => `${v1}/events/${eventId}/photos/rebuild-images`,
 
+  people: (eventId: string) => `${v1}/events/${eventId}/people`,
+  peopleRun: (eventId: string) => `${v1}/events/${eventId}/people/run`,
+  person: (id: string) => `${v1}/people/${id}`,
+
   settings: `${v1}/settings`,
   testEmail: `${v1}/settings/test-email`,
   vapidKeys: `${v1}/settings/vapid-keys`,

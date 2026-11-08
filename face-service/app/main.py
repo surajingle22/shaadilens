@@ -6,6 +6,7 @@ Endpoints:
   GET  /v1/info      -> model + runtime versions
   POST /v1/analyze   -> multipart "file": detect faces + 512-d embeddings
   POST /v1/selfie    -> multipart "file" (+ optional "max_yaw"): validate a guest selfie
+  POST /v1/cluster   -> raw float32 embeddings: group faces into people (DBSCAN)
 """
 
 import logging
@@ -18,6 +19,7 @@ import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 
+from .cluster import cluster_embeddings
 from .engine import FaceEngine
 from .selfie import SelfieRules, validate_selfie
 
@@ -91,3 +93,35 @@ def selfie(request: Request, file: UploadFile = File(...), max_yaw: float | None
     result = validate_selfie(analysis, rules)
     log.info("selfie %dx%d -> %d faces, %s", analysis["width"], analysis["height"], len(analysis["faces"]), result["code"])
     return result
+
+
+MAX_CLUSTER_FACES = int(os.environ.get("MAX_CLUSTER_FACES", "100000"))
+
+
+@app.post("/v1/cluster")
+async def cluster(request: Request, dim: int = 512, eps: float = 0.5, min_samples: int = 3):
+    """Group faces into people (DBSCAN on cosine distance, see app/cluster.py).
+
+    Body: raw little-endian float32 embeddings, N x `dim` (application/octet-stream) — binary instead of
+    JSON because 15,000 x 512 numbers would be ~100 MB of JSON text but only 30 MB as floats.
+    Returns: {"labels": [N ints, -1 = noise], "clusters": K, "noise": n, "elapsed_ms": ...}
+    """
+    if not 0.05 <= eps <= 1.0 or not 2 <= min_samples <= 50 or dim < 1:
+        raise HTTPException(status_code=400, detail="eps must be 0.05-1.0, min_samples 2-50")
+    body = await request.body()
+    if len(body) % (4 * dim) != 0:
+        raise HTTPException(status_code=400, detail=f"Body must be N x {dim} float32 values")
+    n = len(body) // (4 * dim)
+    if n > MAX_CLUSTER_FACES:
+        raise HTTPException(status_code=413, detail=f"At most {MAX_CLUSTER_FACES} faces per request")
+    embeddings = np.frombuffer(body, dtype="<f4").reshape(n, dim)
+
+    t0 = time.perf_counter()
+    # DBSCAN is CPU-heavy: run it in a worker thread so /health keeps answering meanwhile.
+    from starlette.concurrency import run_in_threadpool
+    labels = await run_in_threadpool(cluster_embeddings, embeddings, eps, min_samples)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    k = int(labels.max()) + 1 if len(labels) else 0
+    noise = int((labels == -1).sum())
+    log.info("cluster %d faces (eps=%.2f, min_samples=%d) -> %d people, %d noise in %.0f ms", n, eps, min_samples, k, noise, elapsed_ms)
+    return {"labels": labels.tolist(), "clusters": k, "noise": noise, "elapsed_ms": round(elapsed_ms, 1)}

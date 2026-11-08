@@ -21,6 +21,7 @@ public interface IAppDbContext
     DbSet<UploadSession> UploadSessions { get; }
     DbSet<Selection> Selections { get; }
     DbSet<SelectionSubmission> SelectionSubmissions { get; }
+    DbSet<PersonCluster> PersonClusters { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

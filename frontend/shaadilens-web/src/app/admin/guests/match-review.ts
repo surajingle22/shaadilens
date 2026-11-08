@@ -10,6 +10,7 @@ import { AdminApi } from '../../core/api/admin-api';
 import { API } from '../../core/api/api-urls';
 import { MatchReview as Match, MatchStatus } from '../../core/api/api.models';
 import { Notify } from '../../core/notify';
+import { faceCropStyle } from '../../shared/face-crop';
 import { EventContext } from '../event/event-context';
 
 type Filter = 'all' | MatchStatus;
@@ -86,7 +87,7 @@ type Filter = 'all' | MatchStatus;
     .card.confirmed { border-color: #2e7d32; }
     .card.rejected { opacity: .5; }
     .card.probable { border-color: #ef6c00; }
-    .face { display: block; aspect-ratio: 1; background-repeat: no-repeat; background-color: #222; }
+    .face { display: block; aspect-ratio: 1; background-color: #222; }
     figcaption { display: flex; align-items: center; gap: 4px; padding: 0 2px 0 8px; }
     .score { font: var(--mat-sys-title-small); }
     .score.low { color: #ef6c00; }
@@ -129,24 +130,9 @@ export class MatchReview {
     return API.selfieImage(referenceId);
   }
 
-  /**
-   * Zoom the thumbnail onto the matched face with CSS only: a square around the face box (1.6× its size),
-   * scaled so that square fills the card. background-position % = left / (imageWidth − squareSide).
-   */
+  /** Zoom the thumbnail onto the matched face (CSS only, see shared/face-crop.ts). */
   protected faceStyle(m: Match): Record<string, string> {
-    const W = m.width, H = m.height;
-    const bw = m.face.w * W, bh = m.face.h * H;
-    const side = Math.min(Math.max(bw, bh) * 1.6, W, H);
-    const left = m.face.x * W + bw / 2 - side / 2;
-    const top = m.face.y * H + bh / 2 - side / 2;
-    const pos = (offset: number, full: number) => (full - side > 0 ? Math.min(100, Math.max(0, (offset / (full - side)) * 100)) : 50);
-    // The thumbnail is 400 px on its long edge; small faces in it would be a blur, so use the web image for those.
-    const faceInThumbPx = (Math.max(bw, bh) * 400) / Math.max(W, H);
-    return {
-      'background-image': `url("${faceInThumbPx < 48 ? m.webUrl : m.thumbUrl}")`,
-      'background-size': `${(W / side) * 100}% ${(H / side) * 100}%`,
-      'background-position': `${pos(left, W)}% ${pos(top, H)}%`,
-    };
+    return faceCropStyle(m.face, m.width, m.height, m.thumbUrl, m.webUrl);
   }
 
   protected async set(m: Match, status: 'Confirmed' | 'Rejected'): Promise<void> {

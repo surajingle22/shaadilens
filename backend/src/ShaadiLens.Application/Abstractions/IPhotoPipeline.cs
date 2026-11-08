@@ -17,6 +17,9 @@ public interface IPhotoPipelineScheduler
 
     /// <summary>Queue a fresh search for every guest of the event (e.g. after the admin changed thresholds).</summary>
     void EnqueueRematchEvent(Guid eventId);
+
+    /// <summary>Queue "group faces into people" (DBSCAN) for the event.</summary>
+    void EnqueueClustering(Guid eventId, float eps, int minSamples);
 }
 
 /// <summary>Creates short-lived signed URLs for photo files (see MediaController).</summary>

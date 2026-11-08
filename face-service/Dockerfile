@@ -39,6 +39,7 @@ WORKDIR /srv
 COPY pytest.ini ./
 COPY app ./app
 COPY tests ./tests
+COPY tools ./tools
 
 RUN useradd --system --uid 10001 face && chown -R face /srv
 USER face

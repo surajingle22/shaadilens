@@ -23,6 +23,10 @@ public class Event
     public DateTimeOffset? ExpiresAt { get; set; }
     /// <summary>When the expiry job deleted the event's face data. Photos and selections are kept.</summary>
     public DateTimeOffset? PurgedAt { get; set; }
+    /// <summary>When the People clustering last finished (null = never run).</summary>
+    public DateTimeOffset? ClustersUpdatedAt { get; set; }
+    /// <summary>When a clustering job was queued and hasn't finished yet.</summary>
+    public DateTimeOffset? ClusteringStartedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>Guests can open links: published and not expired.</summary>

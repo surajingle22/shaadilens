@@ -102,7 +102,7 @@ Before analysis, the .NET side normalises the selfie (upright, sRGB, ≤1280 px,
 | Tiny faces in group shots | Few pixels → noisy embedding | `MinFaceSizePx` filter; admin review |
 | Heavy makeup, veil, turban, sehra | Face partly covered | "That's me" adds the confirmed face as a new reference |
 | Motion blur / low light | Edges lost | Blur score; Probable bucket instead of Auto |
-| Look-alike relatives (siblings!) | Genuinely similar faces | Threshold tuning with `tools/eval.py`; "Not me" never shows it again |
+| Look-alike relatives (siblings!) | Genuinely similar faces | Threshold tuning with `tools/eval.py` (4f); "Not me" never shows it again; People view (4e) |
 
 **Query expansion ("Find more")**: a guest ends up with several reference vectors (selfie, second selfie,
 confirmed matches). We search with **each** and keep the **max** similarity per face. A haldi-yellow
@@ -183,6 +183,42 @@ automatically).
 
 The query compares *all* references with *all* faces (500 guests × 2 refs × 15k faces ≈ 15 M distances),
 so it takes seconds on a laptop — it's a button, not something run on every page load.
+
+## 4e. People clusters — "who is who" without names (`face-service/app/cluster.py`)
+
+Search needs a selfie. Clustering doesn't: it groups **all** faces of the event so the admin sees
+"Person 1 (412 photos), Person 2 (380 photos)…" — the bride and groom first.
+
+**DBSCAN** (Density-Based Spatial Clustering of Applications with Noise):
+```
+two faces are neighbours        if cosine distance ≤ eps          (eps 0.5 = similarity ≥ 0.5)
+a face is a "core" face         if it has ≥ min_samples neighbours (3, itself included)
+core faces that touch           → one cluster = one person
+everything else                 → noise (-1): seen once, tiny, blurry, side-on
+```
+Why not k-means? k-means needs the number of people up front and puts every face somewhere. DBSCAN finds
+the number itself and leaves doubtful faces out — exactly what we want for a wedding.
+
+Pipeline: the api sends every embedding as raw float32 (15k × 512 × 4 bytes ≈ 30 MB) to `POST /v1/cluster`,
+gets one label per face, and stores `PersonCluster` rows (`Face.ClusterId`). Re-running after more uploads keeps
+names and guest links: each new cluster inherits from the old cluster most of its faces belonged to.
+
+**Linking a person to a guest** (admin → People) = the admin confirming "these are all Riya": every photo of the
+cluster becomes a Confirmed match (unless Riya said "Not me"), and up to 10 of the clearest faces become her
+references — so later uploads reach her through reverse matching, even if her selfie was poor.
+
+## 4f. Measuring on your own photos (`face-service/tools/eval.py`)
+
+```
+eval-data/selfies/<name>.jpg     one selfie per person
+eval-data/photos/*.jpg           wedding photos
+eval-data/labels.csv             photo,people        e.g.  IMG_001.jpg,asha;bunty
+
+docker compose run --rm -v ./eval-data:/data face-service python tools/eval.py /data
+```
+Prints, per threshold, how many photos would be shown, precision (shown photos that are right), recall (right
+photos that are shown) and F1, plus the best-F1 threshold. 30–50 labelled photos of 5–10 people are enough to
+see where the curve bends for your camera, lighting and makeup.
 ## 5. Where it lives
 
 - `Face.Embedding vector(512)` and `GuestReference.Embedding vector(512)` in Postgres.

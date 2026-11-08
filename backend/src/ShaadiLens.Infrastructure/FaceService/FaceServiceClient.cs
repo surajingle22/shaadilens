@@ -53,6 +53,29 @@ public sealed class FaceServiceClient(HttpClient http) : IFaceEngine
                ?? throw new FaceServiceException("face-service returned an empty body");
     }
 
+    /// <summary>Sends the embeddings as raw little-endian float32 (N × 512) — ~30 MB for 15k faces instead of ~100 MB of JSON.</summary>
+    public async Task<int[]> ClusterAsync(IReadOnlyList<float[]> embeddings, float eps, int minSamples, CancellationToken ct = default)
+    {
+        if (embeddings.Count == 0) return [];
+        var dim = embeddings[0].Length;
+        var bytes = new byte[embeddings.Count * dim * sizeof(float)];
+        for (var i = 0; i < embeddings.Count; i++)
+            System.Runtime.InteropServices.MemoryMarshal.AsBytes(embeddings[i].AsSpan()).CopyTo(bytes.AsSpan(i * dim * sizeof(float)));
+        if (!BitConverter.IsLittleEndian) throw new PlatformNotSupportedException("Big-endian CPUs aren't supported");
+
+        using var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        var url = FormattableString.Invariant($"v1/cluster?dim={dim}&eps={eps}&min_samples={minSamples}");
+        using var response = await http.PostAsync(url, content, ct);
+        await EnsureSuccessAsync(response, ct);
+        var result = await response.Content.ReadFromJsonAsync<ClusterResponse>(Json, ct)
+                     ?? throw new FaceServiceException("face-service returned an empty body");
+        if (result.Labels.Length != embeddings.Count) throw new FaceServiceException("face-service returned the wrong number of labels");
+        return result.Labels;
+    }
+
+    private sealed record ClusterResponse(int[] Labels, int Clusters, int Noise, double ElapsedMs);
+
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)
     {
         if (response.IsSuccessStatusCode) return;

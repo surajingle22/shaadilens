@@ -105,6 +105,19 @@ public sealed class FakeFaceEngine : IFaceEngine
 
     public static SelfieCheck GoodSelfie(float[] embedding) => new(true, "ok", null, embedding);
 
+    /// <summary>
+    /// Stand-in for DBSCAN: faces whose largest component is on the same axis are "the same person";
+    /// groups smaller than minSamples are noise (-1). Labels are numbered in order of first appearance.
+    /// </summary>
+    public Task<int[]> ClusterAsync(IReadOnlyList<float[]> embeddings, float eps, int minSamples, CancellationToken ct = default)
+    {
+        var axes = embeddings.Select(e => Array.IndexOf(e, e.Max())).ToArray();
+        var sizes = axes.GroupBy(a => a).ToDictionary(g => g.Key, g => g.Count());
+        var numbers = new Dictionary<int, int>();
+        return Task.FromResult(axes.Select(a => sizes[a] < minSamples ? -1
+            : numbers.TryGetValue(a, out var n) ? n : numbers[a] = numbers.Count).ToArray());
+    }
+
     public Task<FaceEngineInfo> GetInfoAsync(CancellationToken ct = default) =>
         Task.FromResult(new FaceEngineInfo("fake", "0", "0", ["cpu"], 640, 1600, 512));
 
@@ -147,6 +160,8 @@ public sealed class RecordingScheduler : IPhotoPipelineScheduler
     public void EnqueueFaceDetection(Guid photoId) => FaceDetection.Add(photoId);
     public List<Guid> Rebuild { get; } = [];
     public void EnqueueImageRebuild(Guid photoId) => Rebuild.Add(photoId);
+    public List<Guid> Clustering { get; } = [];
+    public void EnqueueClustering(Guid eventId, float eps, int minSamples) => Clustering.Add(eventId);
     public List<Guid> Rematch { get; } = [];
     public void EnqueueRematchEvent(Guid eventId) => Rematch.Add(eventId);
 }

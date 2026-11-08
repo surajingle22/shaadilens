@@ -31,8 +31,8 @@ public class Face
     public float FaceSizePx { get; set; }
     public float Yaw { get; set; }
     public float Pitch { get; set; }
-    /// <summary>"Person N" group from clustering (Phase 2).</summary>
-    public int? ClusterId { get; set; }
+    /// <summary>"Person N" group from clustering (PersonCluster), or null (not grouped / seen once).</summary>
+    public Guid? ClusterId { get; set; }
 
     public Photo? Photo { get; set; }
 }
