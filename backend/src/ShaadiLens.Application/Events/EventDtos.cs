@@ -18,7 +18,7 @@ public sealed record EventSummaryDto(
 public sealed record EventDto(
     Guid Id, string Name, string Slug, DateOnly? Date, string? Venue, string ThemeColor, string? TitleFont,
     bool WatermarkEnabled, string? WatermarkText, bool IsPublished, bool FaceSearchEnabled, Guid? CoverPhotoId, string? CoverUrl,
-    DateTimeOffset? ExpiresAt, DateTimeOffset CreatedAt, FaceSettingsDto FaceSettings,
+    DateTimeOffset? ExpiresAt, DateTimeOffset CreatedAt, FaceSettingsDto FaceSettings, DateTimeOffset? PurgedAt,
     IReadOnlyList<CollectionDto> Collections);
 
 public sealed record SaveEventRequest(
@@ -40,6 +40,9 @@ public sealed class SaveEventRequestValidator : AbstractValidator<SaveEventReque
         RuleFor(x => x.ThemeColor).Matches("^#[0-9a-fA-F]{6}$").When(x => x.ThemeColor is not null)
             .WithMessage("Theme colour must look like #b0004a");
         RuleFor(x => x.WatermarkText).MaximumLength(80);
+        RuleFor(x => x.WatermarkText).NotEmpty().When(x => x.WatermarkEnabled).WithMessage("Enter the watermark text (e.g. the photographer's name)");
+        RuleFor(x => x.TitleFont).Must(f => f is null || Event.TitleFonts.Contains(f))
+            .WithMessage($"Font must be one of: {string.Join(", ", Event.TitleFonts)}");
     }
 }
 

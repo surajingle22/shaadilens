@@ -1,5 +1,5 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
-import { DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -9,6 +9,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router } from '@angular/router';
@@ -20,7 +21,7 @@ import { EventContext } from '../event-context';
 @Component({
   selector: 'app-event-overview',
   imports: [
-    DecimalPipe, FormsModule, ReactiveFormsModule, CdkDropList, CdkDrag, CdkDragHandle,
+    DatePipe, DecimalPipe, FormsModule, ReactiveFormsModule, MatSelectModule, CdkDropList, CdkDrag, CdkDragHandle,
     MatButtonModule, MatCheckboxModule, MatFormFieldModule, MatIconModule, MatInputModule,
     MatProgressBarModule, MatSlideToggleModule, MatTooltipModule,
   ],
@@ -47,7 +48,17 @@ export class EventOverview {
     themeColor: ['#b0004a'],
     faceSearchEnabled: [true],
     expiresAt: [''],
+    titleFont: [null as string | null],
+    watermarkEnabled: [false],
+    watermarkText: [''],
   });
+
+  /** Same list the API accepts (Event.TitleFonts); loaded from Google Fonts on the guest pages. */
+  protected readonly fonts = ['Playfair Display', 'Cormorant Garamond', 'Great Vibes', 'Dancing Script', 'Marcellus', 'Poppins'];
+
+  protected isPast(iso: string): boolean {
+    return new Date(iso).getTime() < Date.now();
+  }
 
   protected readonly faces = this.fb.group({
     matchThreshold: [0.42, [Validators.required, Validators.min(0.2), Validators.max(0.9)]],
@@ -69,6 +80,7 @@ export class EventOverview {
       this.form.reset({
         name: ev.name, date: ev.date ?? '', venue: ev.venue ?? '', themeColor: ev.themeColor,
         faceSearchEnabled: ev.faceSearchEnabled, expiresAt: ev.expiresAt?.slice(0, 10) ?? '',
+        titleFont: ev.titleFont, watermarkEnabled: ev.watermarkEnabled, watermarkText: ev.watermarkText ?? '',
       });
       this.faces.reset(ev.faceSettings);
       this.collections.set(ev.collections);
@@ -92,14 +104,25 @@ export class EventOverview {
 
   protected async saveDetails(): Promise<void> {
     const v = this.form.getRawValue();
+    const before = this.event;
+    const watermarkChanged = v.watermarkEnabled !== before.watermarkEnabled ||
+      (v.watermarkEnabled && v.watermarkText.trim() !== (before.watermarkText ?? ''));
     await this.run(
       () => this.api.updateEvent(this.event.id, {
-        name: v.name, date: v.date || null, venue: v.venue || null, themeColor: v.themeColor, titleFont: this.event.titleFont,
-        watermarkEnabled: this.event.watermarkEnabled, watermarkText: this.event.watermarkText,
+        name: v.name, date: v.date || null, venue: v.venue || null, themeColor: v.themeColor, titleFont: v.titleFont,
+        watermarkEnabled: v.watermarkEnabled, watermarkText: v.watermarkText.trim() || null,
         faceSearchEnabled: v.faceSearchEnabled, expiresAt: v.expiresAt ? new Date(v.expiresAt + 'T23:59:59').toISOString() : null,
       }),
       'Saved',
     );
+    // New uploads get the new watermark automatically; existing photos need their web image re-rendered.
+    if (watermarkChanged && (this.stats.value()?.photos ?? 0) > 0 &&
+        confirm('Apply the watermark change to the photos already uploaded? (Runs in the background.)')) {
+      await this.run(async () => {
+        const r = await this.api.rebuildImages(this.event.id);
+        this.notify.ok(`Updating ${r.queued} photo(s) in the background…`);
+      }, undefined, false);
+    }
   }
 
   protected async saveFaceSettings(): Promise<void> {

@@ -1,4 +1,10 @@
 @if (ctx.event.value(); as ev) {
+  @if (ev.purgedAt) {
+    <p class="panel warn"><mat-icon>auto_delete</mat-icon> This gallery closed on {{ ev.expiresAt | date: 'd MMM y' }}. Guest selfies and face data
+      were deleted {{ ev.purgedAt | date: 'd MMM y, HH:mm' }}. Photos are kept.</p>
+  } @else if (ev.expiresAt && isPast(ev.expiresAt)) {
+    <p class="panel warn"><mat-icon>event_busy</mat-icon> The gallery is closed (expired). Face data will be deleted within the hour.</p>
+  }
   <!-- ---------- processing ---------- -->
   <section class="panel">
     <div class="row">
@@ -60,12 +66,29 @@
           <span>Theme colour</span>
         </label>
         <mat-form-field appearance="outline">
-          <mat-label>Gallery closes on</mat-label>
-          <input matInput type="date" formControlName="expiresAt" />
-          <mat-hint>Optional</mat-hint>
+          <mat-label>Title font</mat-label>
+          <mat-select formControlName="titleFont">
+            <mat-option [value]="null">Default</mat-option>
+            @for (f of fonts; track f) { <mat-option [value]="f"><span [style.font-family]="f">{{ f }}</span></mat-option> }
+          </mat-select>
         </mat-form-field>
       </div>
+      <mat-form-field appearance="outline">
+        <mat-label>Gallery closes on</mat-label>
+        <input matInput type="date" formControlName="expiresAt" />
+        <mat-hint>Optional. Afterwards links close and selfies + face data are deleted.</mat-hint>
+      </mat-form-field>
       <mat-checkbox formControlName="faceSearchEnabled">Face search (guests find photos with a selfie)</mat-checkbox>
+      <div class="inline watermark">
+        <mat-checkbox formControlName="watermarkEnabled">Watermark</mat-checkbox>
+        @if (form.controls.watermarkEnabled.value) {
+          <mat-form-field appearance="outline">
+            <mat-label>Watermark text</mat-label>
+            <input matInput formControlName="watermarkText" placeholder="© Studio Lens" maxlength="80" />
+            <mat-hint>Bottom-right of the large photos guests view. Originals and thumbnails stay clean.</mat-hint>
+          </mat-form-field>
+        }
+      </div>
       @if (ev.coverUrl) {
         <div class="cover"><img [src]="ev.coverUrl" alt="Cover photo" /><span class="muted small">Cover photo (change it from Photos)</span></div>
       } @else {

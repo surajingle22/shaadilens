@@ -102,6 +102,14 @@ public sealed class PhotoService(IAppDbContext db, IStorageService storage, IPho
         return ids.Count;
     }
 
+    /// <summary>Re-render web + thumb of every processed photo (after the watermark was changed).</summary>
+    public async Task<int> RebuildImagesAsync(Guid eventId, CancellationToken ct)
+    {
+        var ids = await db.Photos.Where(p => p.EventId == eventId && p.StorageKeyWeb != null).Select(p => p.Id).ToListAsync(ct);
+        foreach (var id in ids) pipeline.EnqueueImageRebuild(id);
+        return ids.Count;
+    }
+
     private PhotoDto ToDto(Domain.Entities.Photo p) => new(
         p.Id, p.CollectionId, p.OriginalFileName, p.Width, p.Height, p.TakenAt, p.Status, p.FaceCount,
         p.IsHighlight, p.IsHidden, p.UploadedAt, p.Error,

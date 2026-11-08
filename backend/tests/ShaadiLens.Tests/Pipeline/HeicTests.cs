@@ -29,7 +29,7 @@ public sealed class HeicTests : IDisposable
         photo.StorageKeyOriginal = $"events/{photo.EventId}/photos/{photo.Id}/original.heic";
         await storage.SaveAsync(photo.StorageKeyOriginal, new MemoryStream(heicBytes));
 
-        await new ImageProcessor(storage).PrepareAsync(photo, CancellationToken.None);
+        await new ImageProcessor(storage).PrepareAsync(photo, null, CancellationToken.None);
 
         photo.StorageKeyOriginal.Should().EndWith("original.jpg");
         (await storage.ExistsAsync($"events/{photo.EventId}/photos/{photo.Id}/original.heic")).Should().BeFalse();

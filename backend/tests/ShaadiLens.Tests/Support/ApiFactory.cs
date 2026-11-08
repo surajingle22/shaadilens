@@ -145,6 +145,8 @@ public sealed class RecordingScheduler : IPhotoPipelineScheduler
     public List<Guid> FaceDetection { get; } = [];
     public void EnqueueProcessing(Guid photoId) => Processing.Add(photoId);
     public void EnqueueFaceDetection(Guid photoId) => FaceDetection.Add(photoId);
+    public List<Guid> Rebuild { get; } = [];
+    public void EnqueueImageRebuild(Guid photoId) => Rebuild.Add(photoId);
     public List<Guid> Rematch { get; } = [];
     public void EnqueueRematchEvent(Guid eventId) => Rematch.Add(eventId);
 }

@@ -56,3 +56,12 @@ public enum PhotoVariant
     Web = 1,
     Original = 2,
 }
+
+public static class ShareLinkTypeRules
+{
+    /// <summary>Full and Selection links show every visible photo of the event.</summary>
+    public static bool ShowsWholeGallery(this ShareLinkType type) => type is ShareLinkType.Full or ShareLinkType.Selection;
+
+    /// <summary>Guest and VIP links find "your photos" from a selfie.</summary>
+    public static bool NeedsSelfie(this ShareLinkType type) => type is ShareLinkType.Guest or ShareLinkType.VipGuest;
+}

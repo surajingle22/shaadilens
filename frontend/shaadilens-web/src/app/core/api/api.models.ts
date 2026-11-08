@@ -73,6 +73,8 @@ export interface EventDetail {
   coverUrl: string | null;
   expiresAt: string | null;
   createdAt: string;
+  /** When face data was deleted after expiry (null = not purged). */
+  purgedAt: string | null;
   faceSettings: FaceSettings;
   collections: Collection[];
 }
@@ -184,6 +186,8 @@ export interface ShareLink {
   expiresAt: string | null;
   isActive: boolean;
   guestCount: number;
+  /** Selection links: max hearts (null = unlimited). */
+  selectionLimit: number | null;
   createdAt: string;
 }
 
@@ -196,6 +200,7 @@ export interface SaveShareLinkRequest {
   allowBulkDownload: boolean;
   expiresAt: string | null;
   isActive: boolean;
+  selectionLimit?: number | null;
 }
 
 export interface PinResponse {
@@ -221,6 +226,27 @@ export interface GuestAdmin {
   pushOn: boolean;
   emailOn: boolean;
   lastNotifiedAt: string | null;
+}
+
+/** The couple's album picks through one Selection link. */
+export interface SelectionLink {
+  linkId: string;
+  label: string | null;
+  limit: number | null;
+  count: number;
+  locked: boolean;
+  submittedAt: string | null;
+  submittedBy: string | null;
+  items: {
+    photoId: string;
+    fileName: string;
+    collection: string;
+    thumbUrl: string;
+    webUrl: string;
+    comment: string | null;
+    selectedBy: string | null;
+    createdAt: string;
+  }[];
 }
 
 /** Admin → Settings (read-only; secrets live in .env). */

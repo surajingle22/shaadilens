@@ -12,6 +12,9 @@ public interface IPhotoPipelineScheduler
     /// <summary>Queue only face detection again (e.g. after face-service was down).</summary>
     void EnqueueFaceDetection(Guid photoId);
 
+    /// <summary>Re-render web + thumb from the original (watermark changed). Faces stay.</summary>
+    void EnqueueImageRebuild(Guid photoId);
+
     /// <summary>Queue a fresh search for every guest of the event (e.g. after the admin changed thresholds).</summary>
     void EnqueueRematchEvent(Guid eventId);
 }

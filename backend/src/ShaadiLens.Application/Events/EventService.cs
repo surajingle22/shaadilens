@@ -214,6 +214,6 @@ public sealed class EventService(
         return new EventDto(ev.Id, ev.Name, ev.Slug, ev.Date, ev.Venue, ev.ThemeColor, ev.TitleFont,
             ev.WatermarkEnabled, ev.WatermarkText, ev.IsPublished, ev.FaceSearchEnabled, ev.CoverPhotoId,
             ev.CoverPhotoId is { } cover ? urls.GetUrl(cover, PhotoVariant.Web) : null, ev.ExpiresAt, ev.CreatedAt,
-            FaceSettingsDto.From(ev.FaceSettings), collections);
+            FaceSettingsDto.From(ev.FaceSettings), ev.PurgedAt, collections);
     }
 }

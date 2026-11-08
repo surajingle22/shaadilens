@@ -45,7 +45,7 @@ public sealed class GuestAccessService(
         var (link, ev) = await OpenLinkAsync(token, ct);
         return new PublicLinkDto(
             Branding(ev), link.Type, link.PinHash is not null, link.RequireRegistration, link.RegistrationFields,
-            SelfieRequired: link.Type == ShareLinkType.Guest, ev.FaceSearchEnabled);
+            SelfieRequired: link.Type.NeedsSelfie(), ev.FaceSearchEnabled);
     }
 
     /// <summary>Checks a PIN. Failures are audit-logged; the API also rate-limits this endpoint.</summary>
@@ -73,7 +73,7 @@ public sealed class GuestAccessService(
         var (link, ev) = await OpenLinkAsync(token, ct);
         if (link.PinHash is not null && !pinVerified) throw new ForbiddenException("Please enter the PIN first.");
 
-        var needsSelfie = link.Type == ShareLinkType.Guest;
+        var needsSelfie = link.Type.NeedsSelfie();
         if (needsSelfie && !ev.FaceSearchEnabled) throw new ForbiddenException("Face search is turned off for this event.");
         if (needsSelfie && selfie is null) throw new BadRequestException("A selfie is required to find your photos.");
         if (selfie is not null && !req.Consent)
@@ -82,7 +82,7 @@ public sealed class GuestAccessService(
         ValidateFields(link, req);
 
         // Anonymous Full-gallery viewer: no guest row needed.
-        var anonymous = link.Type == ShareLinkType.Full && !link.RequireRegistration && selfie is null;
+        var anonymous = link.Type.ShowsWholeGallery() && !link.RequireRegistration && selfie is null;
         if (anonymous) return (new GuestContext(ev.Id, link.Id, null, link.Type), null);
 
         var guest = new Guest
@@ -90,6 +90,7 @@ public sealed class GuestAccessService(
             EventId = ev.Id,
             ShareLinkId = link.Id,
             Name = Clean(req.Name, 100),
+            IsVip = link.Type == ShareLinkType.VipGuest,
             Phone = Clean(req.Phone, 30),
             Email = Clean(req.Email, 200),
             ConsentGivenAt = selfie is not null ? time.GetUtcNow() : null,
@@ -157,7 +158,7 @@ public sealed class GuestAccessService(
     /// <summary>Full-gallery links: every visible photo.</summary>
     public async Task<PagedResult<GuestPhotoDto>> GetGalleryAsync(GuestContext ctx, Guid? collectionId, int page, int pageSize, CancellationToken ct)
     {
-        if (ctx.LinkType != ShareLinkType.Full) throw new ForbiddenException("This link only shows your own photos.");
+        if (!ctx.LinkType.ShowsWholeGallery()) throw new ForbiddenException("This link only shows your own photos.");
         await OpenSessionAsync(ctx, ct);
         return await PageAsync(VisiblePhotos(ctx.EventId), collectionId, page, pageSize, ct);
     }
@@ -165,7 +166,7 @@ public sealed class GuestAccessService(
     public async Task<IReadOnlyList<GuestCollectionDto>> GetCollectionsAsync(GuestContext ctx, CancellationToken ct)
     {
         await OpenSessionAsync(ctx, ct);
-        var photos = ctx.LinkType == ShareLinkType.Full
+        var photos = ctx.LinkType.ShowsWholeGallery()
             ? VisiblePhotos(ctx.EventId)
             : VisibleMatches(ctx, RequireGuest(ctx)).Where(m => Shown.Contains(m.Status)).Select(m => m.Photo!);
         var counts = await photos.GroupBy(p => p.CollectionId).Select(g => new { g.Key, Count = g.Count() })
@@ -280,7 +281,7 @@ public sealed class GuestAccessService(
     {
         var (link, _, _) = await OpenSessionAsync(ctx, ct);
         if (!link.AllowBulkDownload) throw new ForbiddenException("Download all is turned off for this gallery.");
-        if (ctx.LinkType != ShareLinkType.Full) RequireGuest(ctx);
+        if (!ctx.LinkType.ShowsWholeGallery()) RequireGuest(ctx);
     }
 
     /// <summary>Files for "Download all" (originals), after the same permission checks.</summary>
@@ -289,7 +290,7 @@ public sealed class GuestAccessService(
         var (link, _, _) = await OpenSessionAsync(ctx, ct);
         if (!link.AllowBulkDownload) throw new ForbiddenException("Download all is turned off for this gallery.");
 
-        var photos = ctx.LinkType == ShareLinkType.Full
+        var photos = ctx.LinkType.ShowsWholeGallery()
             ? VisiblePhotos(ctx.EventId)
             : VisibleMatches(ctx, RequireGuest(ctx)).Where(m => Shown.Contains(m.Status)).Select(m => m.Photo!);
         if (collectionId is { } cid) photos = photos.Where(p => p.CollectionId == cid);
@@ -317,7 +318,7 @@ public sealed class GuestAccessService(
 
     /// <summary>The one permission check for a single photo.</summary>
     public async Task<bool> CanSeePhotoAsync(GuestContext ctx, Guid photoId, CancellationToken ct) =>
-        ctx.LinkType == ShareLinkType.Full
+        ctx.LinkType.ShowsWholeGallery()
             ? await VisiblePhotos(ctx.EventId).AnyAsync(p => p.Id == photoId, ct)
             : ctx.GuestId is { } gid && await VisibleMatches(ctx, gid)
                 .AnyAsync(m => m.PhotoId == photoId && m.Status != MatchStatus.Rejected, ct);
@@ -384,7 +385,7 @@ public sealed class GuestAccessService(
         var link = await db.ShareLinks.AsNoTracking().Include(l => l.Event)
                        .FirstOrDefaultAsync(l => l.Token == token, ct)
                    ?? throw new NotFoundException("Gallery link");
-        if (!link.IsUsable(time.GetUtcNow()) || !link.Event!.IsPublished)
+        if (!link.IsUsable(time.GetUtcNow()) || !link.Event!.IsOpen(time.GetUtcNow()))
             throw new ForbiddenException("This gallery isn't open right now. Please check with the couple.");
         return (link, link.Event);
     }
@@ -394,7 +395,7 @@ public sealed class GuestAccessService(
     {
         var link = await db.ShareLinks.AsNoTracking().Include(l => l.Event)
             .FirstOrDefaultAsync(l => l.Id == ctx.LinkId && l.EventId == ctx.EventId, ct);
-        if (link is null || !link.IsUsable(time.GetUtcNow()) || !link.Event!.IsPublished)
+        if (link is null || !link.IsUsable(time.GetUtcNow()) || !link.Event!.IsOpen(time.GetUtcNow()))
             throw new ForbiddenException("This gallery isn't open right now. Please check with the couple.");
 
         Guest? guest = null;

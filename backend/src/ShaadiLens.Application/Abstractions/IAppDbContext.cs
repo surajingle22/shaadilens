@@ -19,6 +19,8 @@ public interface IAppDbContext
     DbSet<ShareLink> ShareLinks { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<UploadSession> UploadSessions { get; }
+    DbSet<Selection> Selections { get; }
+    DbSet<SelectionSubmission> SelectionSubmissions { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

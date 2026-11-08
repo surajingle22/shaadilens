@@ -15,18 +15,27 @@
       <mat-form-field appearance="outline">
         <mat-label>Type</mat-label>
         <mat-select formControlName="type">
-          <mat-option value="Guest">Guest — selfie, sees only their photos</mat-option>
-          <mat-option value="Full">Full gallery — sees all photos</mat-option>
+          @for (t of types; track t.value) {
+            <mat-option [value]="t.value"><mat-icon>{{ t.icon }}</mat-icon> {{ t.name }} — {{ t.hint }}</mat-option>
+          }
         </mat-select>
       </mat-form-field>
+      @if (form.controls.type.value === 'Selection') {
+        <mat-form-field appearance="outline">
+          <mat-label>How many photos can they pick?</mat-label>
+          <input matInput type="number" min="1" formControlName="selectionLimit" placeholder="e.g. 40 (empty = no limit)" />
+        </mat-form-field>
+      }
       <mat-form-field appearance="outline">
         <mat-label>Label (for you)</mat-label>
         <input matInput formControlName="label" placeholder="Table cards QR" />
       </mat-form-field>
     </div>
     <div class="checks">
-      <mat-checkbox formControlName="requireRegistration">Ask guests to fill a form</mat-checkbox>
-      @if (form.controls.requireRegistration.value) {
+      @if (form.controls.type.value !== 'VipGuest') {
+        <mat-checkbox formControlName="requireRegistration">Ask guests to fill a form</mat-checkbox>
+      }
+      @if (form.controls.requireRegistration.value && form.controls.type.value !== 'VipGuest') {
         <span class="sub">
           <mat-checkbox formControlName="askName">Name</mat-checkbox>
           <mat-checkbox formControlName="askPhone">Phone</mat-checkbox>
@@ -49,8 +58,8 @@
       <img class="qr" [src]="urls.qr(link.id)" alt="QR code" loading="lazy" />
       <div class="main">
         <h3>
-          <mat-icon>{{ link.type === 'Guest' ? 'face' : 'photo_library' }}</mat-icon>
-          {{ link.label || (link.type === 'Guest' ? 'Guest link' : 'Full gallery link') }}
+          <mat-icon>{{ typeInfo(link.type).icon }}</mat-icon>
+          {{ link.label || typeInfo(link.type).name }}
           <span class="muted small">· {{ link.guestCount }} guest(s)</span>
         </h3>
         <div class="url">
@@ -60,7 +69,8 @@
           <a mat-icon-button [href]="whatsapp(link)" target="_blank" rel="noopener" matTooltip="Share on WhatsApp"><mat-icon>chat</mat-icon></a>
         </div>
         <p class="muted small">
-          {{ link.type === 'Guest' ? 'Selfie + ' : '' }}{{ fields(link) }} ·
+          {{ link.type === 'Guest' || link.type === 'VipGuest' ? 'Selfie + ' : '' }}{{ fields(link) }} ·
+          @if (link.type === 'Selection') { picks {{ link.selectionLimit ? 'up to ' + link.selectionLimit : 'unlimited' }} · }
           {{ link.allowSingleDownload ? (link.allowBulkDownload ? 'downloads + ZIP' : 'downloads') : 'no downloads' }} ·
           {{ link.hasPin ? 'PIN protected' : 'no PIN' }}
         </p>

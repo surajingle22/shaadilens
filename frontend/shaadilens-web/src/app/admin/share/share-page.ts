@@ -49,7 +49,20 @@ export class SharePage {
     allowSingleDownload: [true],
     allowBulkDownload: [true],
     withPin: [false],
+    selectionLimit: [null as number | null],
   });
+
+  /** What each link type does — used for icons, names and the type picker. */
+  protected readonly types: { value: ShareLinkType; icon: string; name: string; hint: string }[] = [
+    { value: 'Guest', icon: 'face', name: 'Guest link', hint: 'Guests take a selfie and see only their photos' },
+    { value: 'VipGuest', icon: 'star', name: 'VIP link', hint: 'Selfie only, no form (family, close friends)' },
+    { value: 'Full', icon: 'photo_library', name: 'Full gallery link', hint: 'Everyone sees all photos' },
+    { value: 'Selection', icon: 'favorite', name: 'Selection link', hint: 'The couple hearts photos for the album' },
+  ];
+
+  protected typeInfo(type: ShareLinkType) {
+    return this.types.find((t) => t.value === type)!;
+  }
 
   constructor() {
     // Open the create form automatically when there are no links yet.
@@ -65,6 +78,7 @@ export class SharePage {
       const link = await this.api.createShareLink(this.ctx.eventId()!, {
         type: v.type, label: v.label || null, requireRegistration: v.requireRegistration, registrationFields: fields,
         allowSingleDownload: v.allowSingleDownload, allowBulkDownload: v.allowBulkDownload, expiresAt: null, isActive: true,
+        selectionLimit: v.type === 'Selection' ? v.selectionLimit || null : null,
       });
       if (v.withPin) await this.pin(link, 'generate');
       this.notify.ok('Link created');
@@ -79,7 +93,7 @@ export class SharePage {
     const req: SaveShareLinkRequest = {
       type: link.type, label: link.label, requireRegistration: link.requireRegistration, registrationFields: link.registrationFields,
       allowSingleDownload: link.allowSingleDownload, allowBulkDownload: link.allowBulkDownload, expiresAt: link.expiresAt,
-      isActive: link.isActive, [key]: value,
+      isActive: link.isActive, selectionLimit: link.selectionLimit, [key]: value,
     };
     try {
       await this.api.updateShareLink(link.id, req);
@@ -117,7 +131,7 @@ export class SharePage {
 
   protected whatsapp(link: ShareLink): string {
     const name = this.ctx.event.value()?.name ?? 'our wedding';
-    const text = link.type === 'Guest'
+    const text = link.type === 'Guest' || link.type === 'VipGuest'
       ? `Find your photos from ${name}! Open the link, take a selfie and see every photo you're in: ${link.url}`
       : `Photos from ${name}: ${link.url}`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;

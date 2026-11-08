@@ -120,6 +120,9 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<DateTimeOffset?>("PurgedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -435,6 +438,66 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.ToTable("Photos");
                 });
 
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.Selection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PhotoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SelectedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("ShareLinkId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PhotoId");
+
+                    b.HasIndex("ShareLinkId", "PhotoId")
+                        .IsUnique();
+
+                    b.ToTable("Selections");
+                });
+
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.SelectionSubmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Locked")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ShareLinkId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubmittedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShareLinkId")
+                        .IsUnique();
+
+                    b.ToTable("SelectionSubmissions");
+                });
+
             modelBuilder.Entity("ShaadiLens.Domain.Entities.ShareLink", b =>
                 {
                     b.Property<Guid>("Id")
@@ -650,6 +713,32 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Collection");
+                });
+
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.Selection", b =>
+                {
+                    b.HasOne("ShaadiLens.Domain.Entities.Photo", "Photo")
+                        .WithMany()
+                        .HasForeignKey("PhotoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShaadiLens.Domain.Entities.ShareLink", null)
+                        .WithMany()
+                        .HasForeignKey("ShareLinkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Photo");
+                });
+
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.SelectionSubmission", b =>
+                {
+                    b.HasOne("ShaadiLens.Domain.Entities.ShareLink", null)
+                        .WithMany()
+                        .HasForeignKey("ShareLinkId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShaadiLens.Domain.Entities.ShareLink", b =>

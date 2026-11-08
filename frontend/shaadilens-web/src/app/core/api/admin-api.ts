@@ -23,6 +23,7 @@ import {
   PinResponse,
   SaveEventRequest,
   SaveShareLinkRequest,
+  SelectionLink,
   ShareLink,
   UpdatePhotoRequest,
   UploadStatusResponse,
@@ -97,6 +98,14 @@ export class AdminApi {
   rematchAll = (eventId: string) => this.post<void>(API.rematch(eventId), {});
   /** Push/email the guest now ("resend notification"). */
   notifyGuest = (id: string) => this.post<void>(API.guestNotify(id), {});
+
+  // ---------- selections, watermark ----------
+  selections = (eventId: string) => this.get<SelectionLink[]>(API.selections(eventId));
+  /** One comma-separated line of file names (for Lightroom). */
+  selectionNames = (eventId: string, linkId?: string) =>
+    firstValueFrom(this.http.get(API.selectionExport(eventId, 'names', linkId), { responseType: 'text' }));
+  unlockSelection = (linkId: string) => this.post<void>(API.selectionUnlock(linkId), {});
+  rebuildImages = (eventId: string) => this.post<{ queued: number }>(API.rebuildImages(eventId), {});
 
   // ---------- settings ----------
   settings = () => this.get<AppSettings>(API.settings);

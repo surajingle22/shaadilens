@@ -72,6 +72,18 @@ nginx passes Cloudflare's `X-Forwarded-Proto: https` through, so the admin cooki
 Restart the api, then Settings → **Send test email**. Guests who gave an email can tick "Also email me".
 
 Guests get at most one message per 10 minutes ("12 new photos of you!"). Guests → **send** icon resends now.
+
+## Album selection (for the couple)
+1. Share → **New link** → type **Selection link**, set "How many photos can they pick?" (e.g. 40).
+2. Send the link to the couple. They tap ❤ on photos, add notes, then **Submit selection** (locks it).
+3. **Selections** tab: **Copy file names** → Lightroom: Library → Filter (`\`) → Text → Filename → Contains → paste.
+   Or download **CSV** / **ZIP** of the originals. **Unlock** lets them change their picks again.
+
+## Watermark, fonts, closing the gallery
+- Overview → Details: **Watermark** (text) and **Title font**. After changing the watermark, answer "yes" to apply it
+  to existing photos (background job). Browsers that already opened a photo may show the old one for up to an hour.
+- **Gallery closes on**: after that day guest links stop working, and within an hour all selfies and face data are
+  deleted automatically. Photos and album picks stay. Extend the date *before* it passes if you need more time.
 ## Backup / restore
 
 Everything lives in two Docker volumes: `shaadilens_pgdata` (database) and `shaadilens_photos` (files).

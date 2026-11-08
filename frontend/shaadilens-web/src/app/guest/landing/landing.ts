@@ -26,7 +26,9 @@ import { PublicLink } from '../../core/api/guest-api';
           <p class="lead">Take one selfie and we’ll find every photo you’re in.</p>
           <button mat-flat-button class="cta" (click)="start.emit()"><mat-icon>photo_camera</mat-icon> Find your photos</button>
           <ol class="how">
-            <li><mat-icon>badge</mat-icon> Tell us your name</li>
+            @if (link().requireRegistration && link().registrationFields !== 'None') {
+              <li><mat-icon>badge</mat-icon> Tell us your name</li>
+            }
             <li><mat-icon>face</mat-icon> Take a quick selfie</li>
             <li><mat-icon>photo_library</mat-icon> See &amp; download your photos</li>
           </ol>
@@ -44,7 +46,7 @@ import { PublicLink } from '../../core/api/guest-api';
       display: grid; place-items: center; border-radius: 0 0 28px 28px; }
     .cover mat-icon { font-size: 72px; width: 72px; height: 72px; color: var(--mat-sys-primary); }
     .text { padding: 24px 20px 32px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-    h1 { font: var(--mat-sys-headline-medium); font-family: Georgia, 'Times New Roman', serif; color: var(--mat-sys-primary); margin: 0; }
+    h1 { font: var(--mat-sys-headline-medium); font-family: var(--title-font, Georgia, 'Times New Roman', serif); color: var(--mat-sys-primary); margin: 0; }
     .meta { color: var(--mat-sys-on-surface-variant); margin: 0; }
     .lead { margin: 12px 0 4px; font: var(--mat-sys-body-large); }
     .cta { height: 52px; padding: 0 28px; font-size: 17px; border-radius: 26px; margin: 8px 0; }

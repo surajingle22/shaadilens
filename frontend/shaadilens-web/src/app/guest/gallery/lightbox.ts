@@ -18,6 +18,15 @@ import { GuestPhoto } from '../../core/api/guest-api';
         <button mat-icon-button (click)="closed.emit()" aria-label="Close"><mat-icon>close</mat-icon></button>
         <span class="count">{{ index() + 1 }} / {{ photos().length }}</span>
         <span class="tools">
+          @if (selectable()) {
+            @if (picks().has(current().id)) {
+              <button mat-icon-button (click)="editComment.emit(current())" aria-label="Comment"><mat-icon>edit_note</mat-icon></button>
+            }
+            <button mat-icon-button class="heart" [class.on]="picks().has(current().id)" (click)="toggleSelect.emit(current())"
+                    [attr.aria-label]="picks().has(current().id) ? 'Remove from selection' : 'Add to selection'">
+              <mat-icon [class.filled]="picks().has(current().id)">favorite</mat-icon>
+            </button>
+          }
           @if (feedback() === 'mine') {
             <button mat-button class="not-me" (click)="reject.emit(current())"><mat-icon>person_off</mat-icon> Not me</button>
           }
@@ -38,6 +47,9 @@ import { GuestPhoto } from '../../core/api/guest-api';
       }
       @if (index() < photos().length - 1) {
         <button mat-icon-button class="nav next" (click)="go(1)" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
+      }
+      @if (selectable() && picks().get(current().id); as note) {
+        <footer class="note"><mat-icon inline>sticky_note_2</mat-icon> {{ note }}</footer>
       }
       @if (feedback() === 'maybe') {
         <footer class="ask">
@@ -62,6 +74,9 @@ import { GuestPhoto } from '../../core/api/guest-api';
     .prev { left: 8px; }
     .next { right: 8px; }
     .tools { display: flex; align-items: center; gap: 4px; }
+    .heart.on { color: #ff4d6d; }
+    .note { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+      background: linear-gradient(transparent, rgb(0 0 0 / .75)); text-align: center; }
     .not-me { color: #fff; }
     .ask { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
       gap: 8px; padding: 16px 12px calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgb(0 0 0 / .75)); }
@@ -79,6 +94,11 @@ export class Lightbox {
   readonly feedback = input<'none' | 'mine' | 'maybe'>('none');
   readonly confirm = output<GuestPhoto>();
   readonly reject = output<GuestPhoto>();
+  /** Selection links: show the heart; `picks` maps picked photo ids to their comment. */
+  readonly selectable = input(false);
+  readonly picks = input<ReadonlyMap<string, string | null>>(new Map());
+  readonly toggleSelect = output<GuestPhoto>();
+  readonly editComment = output<GuestPhoto>();
   readonly closed = output<void>();
   readonly download = output<GuestPhoto>();
   /** Asks the parent to load more photos when we reach the end of what's loaded. */

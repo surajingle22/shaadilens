@@ -37,6 +37,15 @@ export interface GuestSessionInfo {
   notifications: NotificationStatus;
 }
 
+/** Selection link state: "37 / 40", locked after submit. */
+export interface SelectionState {
+  limit: number | null;
+  count: number;
+  locked: boolean;
+  submittedAt: string | null;
+  items: { photoId: string; comment: string | null }[];
+}
+
 /** "Notify me" state. pushPublicKey = null → Web Push isn't set up on this server. */
 export interface NotificationStatus {
   pushPublicKey: string | null;
@@ -116,6 +125,14 @@ export class GuestApi {
     return firstValueFrom(this.http.post<MatchSummary>(`${this.base}/me/selfie`, body));
   }
   deleteMe = () => firstValueFrom(this.http.delete<void>(`${this.base}/me`));
+
+  // ---------- Selection links (album picks) ----------
+  selection = () => firstValueFrom(this.http.get<SelectionState>(`${this.base}/selections`));
+  select = (photoId: string) => firstValueFrom(this.http.post<SelectionState>(`${this.base}/selections/${photoId}`, {}));
+  unselect = (photoId: string) => firstValueFrom(this.http.delete<SelectionState>(`${this.base}/selections/${photoId}`));
+  comment = (photoId: string, comment: string | null) =>
+    firstValueFrom(this.http.put<SelectionState>(`${this.base}/selections/${photoId}/comment`, { comment }));
+  submitSelection = () => firstValueFrom(this.http.post<SelectionState>(`${this.base}/selections/submit`, {}));
 
   /** Turn on push (browser subscription) and/or email; both null/false = off. */
   setNotifications = (subscription: PushSubscriptionJSON | null, email: boolean) =>

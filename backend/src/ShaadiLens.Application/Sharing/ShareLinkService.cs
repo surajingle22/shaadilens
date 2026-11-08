@@ -12,11 +12,13 @@ namespace ShaadiLens.Application.Sharing;
 public sealed record ShareLinkDto(
     Guid Id, ShareLinkType Type, string? Label, string Token, string Url, bool HasPin,
     bool RequireRegistration, RegistrationFields RegistrationFields, bool AllowSingleDownload,
-    bool AllowBulkDownload, DateTimeOffset? ExpiresAt, bool IsActive, int GuestCount, DateTimeOffset CreatedAt);
+    bool AllowBulkDownload, DateTimeOffset? ExpiresAt, bool IsActive, int GuestCount, DateTimeOffset CreatedAt,
+    int? SelectionLimit);
 
 public sealed record SaveShareLinkRequest(
     ShareLinkType Type, string? Label, bool RequireRegistration, RegistrationFields RegistrationFields,
-    bool AllowSingleDownload, bool AllowBulkDownload, DateTimeOffset? ExpiresAt, bool IsActive);
+    bool AllowSingleDownload, bool AllowBulkDownload, DateTimeOffset? ExpiresAt, bool IsActive,
+    int? SelectionLimit = null);
 
 /// <param name="Action">"generate" (random 6 digits), "set" (use Pin), "remove".</param>
 public sealed record PinRequest(string Action, string? Pin);
@@ -28,8 +30,8 @@ public sealed class SaveShareLinkRequestValidator : AbstractValidator<SaveShareL
 {
     public SaveShareLinkRequestValidator()
     {
-        RuleFor(x => x.Type).Must(t => t is ShareLinkType.Guest or ShareLinkType.Full)
-            .WithMessage("Phase 1 supports Guest and Full links (VIP and Selection come in Phase 2)");
+        RuleFor(x => x.Type).IsInEnum();
+        RuleFor(x => x.SelectionLimit).InclusiveBetween(1, 5000).When(x => x.SelectionLimit is not null);
         RuleFor(x => x.Label).MaximumLength(100);
     }
 }
@@ -109,7 +111,7 @@ public sealed class ShareLinkService(IAppDbContext db, IShareArtwork artwork, IO
             ev.Venue,
         }.Where(s => !string.IsNullOrWhiteSpace(s)));
         return artwork.PosterPng(
-            new PosterInfo(ev.Name, subtitle.Length > 0 ? subtitle : null, ev.ThemeColor, UrlFor(link), link.Type == ShareLinkType.Full),
+            new PosterInfo(ev.Name, subtitle.Length > 0 ? subtitle : null, ev.ThemeColor, UrlFor(link), link.Type.ShowsWholeGallery()),
             size is "a5" ? "a5" : "a4");
     }
 
@@ -128,9 +130,16 @@ public sealed class ShareLinkService(IAppDbContext db, IShareArtwork artwork, IO
         link.AllowBulkDownload = req.AllowBulkDownload;
         link.ExpiresAt = req.ExpiresAt;
         link.IsActive = req.IsActive;
+        link.SelectionLimit = req.Type == ShareLinkType.Selection ? req.SelectionLimit : null;
+        if (req.Type == ShareLinkType.VipGuest)
+        {
+            // VIP = selfie only: no form (the consent checkbox is still shown — it's required for face data).
+            link.RequireRegistration = false;
+            link.RegistrationFields = RegistrationFields.None;
+        }
     }
 
     private ShareLinkDto ToDto(ShareLink l, int guests) => new(
         l.Id, l.Type, l.Label, l.Token, UrlFor(l), l.PinHash is not null, l.RequireRegistration, l.RegistrationFields,
-        l.AllowSingleDownload, l.AllowBulkDownload, l.ExpiresAt, l.IsActive, guests, l.CreatedAt);
+        l.AllowSingleDownload, l.AllowBulkDownload, l.ExpiresAt, l.IsActive, guests, l.CreatedAt, l.SelectionLimit);
 }

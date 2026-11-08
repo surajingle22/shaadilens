@@ -1,5 +1,6 @@
 using System.Globalization;
 using ImageMagick;
+using ImageMagick.Drawing;
 using ShaadiLens.Application.Abstractions;
 using ShaadiLens.Domain.Entities;
 
@@ -21,7 +22,8 @@ public sealed class ImageProcessor(IStorageService storage)
 
     private static readonly string[] HeicExtensions = [".heic", ".heif"];
 
-    public async Task PrepareAsync(Photo photo, CancellationToken ct)
+    /// <param name="watermark">Text drawn on the web image (bottom-right), or null. Thumbs and originals stay clean.</param>
+    public async Task PrepareAsync(Photo photo, string? watermark, CancellationToken ct)
     {
         if (HeicExtensions.Contains(Path.GetExtension(photo.StorageKeyOriginal).ToLowerInvariant()))
             await ConvertHeicToJpegAsync(photo, ct);
@@ -59,15 +61,42 @@ public sealed class ImageProcessor(IStorageService storage)
         image.Strip();                                    // drop EXIF/GPS/XMP/ICC
         FitWithin(image, WebSize);
 
+        // Thumbnail first, from the clean image: grids look nicer without a watermark on every tile.
+        using (var thumb = (MagickImage)image.Clone())
+        {
+            FitWithin(thumb, ThumbSize);
+            await SaveJpegAsync(thumb, StorageKeys.Thumb(photo.EventId, photo.Id), quality: 75, ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(watermark)) DrawWatermark(image, watermark);
         var webKey = StorageKeys.Web(photo.EventId, photo.Id);
         await SaveJpegAsync(image, webKey, quality: 82, ct);
-
-        FitWithin(image, ThumbSize);
         var thumbKey = StorageKeys.Thumb(photo.EventId, photo.Id);
-        await SaveJpegAsync(image, thumbKey, quality: 75, ct);
 
         photo.StorageKeyWeb = webKey;
         photo.StorageKeyThumb = thumbKey;
+    }
+
+    private static readonly string WatermarkFont = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Poppins-SemiBold.ttf");
+
+    /// <summary>
+    /// Semi-transparent text in the bottom-right corner, sized to the photo (≈3% of the long edge), with a soft
+    /// shadow so it reads on both bright and dark photos. Only on the "web" image guests see in the lightbox.
+    /// </summary>
+    public static void DrawWatermark(MagickImage image, string text)
+    {
+        var size = Math.Max(14, Math.Max(image.Width, image.Height) * 0.03);
+        var margin = (int)(size * 0.9);
+        foreach (var (color, offset) in new[] { (new MagickColor(0, 0, 0, 90), 2), (new MagickColor(255, 255, 255, 170), 0) })
+        {
+            new Drawables()
+                .Font(WatermarkFont)
+                .FontPointSize(size)
+                .FillColor(color)
+                .Gravity(Gravity.Southeast)
+                .Text(margin - offset, margin - offset, text.Trim())
+                .Draw(image);
+        }
     }
 
     /// <summary>iPhones save HEIC, which many browsers can't show. Convert once to a high-quality JPEG original.</summary>

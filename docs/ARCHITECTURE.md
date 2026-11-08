@@ -191,6 +191,27 @@ pipeline is now `Uploaded → Resized → FacesDetected → Matched`.
 - **Settings** (`/api/v1/settings`): read-only status, "Send test email", "Generate VAPID keys" (shown once,
   never stored — paste into `.env`).
 
+## 7c. Link types, album picks, watermark, expiry (Phase 2c)
+
+| Link | Who | Sees | Form |
+|---|---|---|---|
+| **Guest** | guests (QR on tables) | only photos they're in (selfie) | fields you choose + consent |
+| **VIP** | family, close friends | only photos they're in (selfie) | none — consent tick only |
+| **Full** | everyone you trust | whole gallery by collection | optional |
+| **Selection** | the couple | whole gallery + ❤ hearts, "37 / 40", comments, Submit (locks) | optional (name = "selected by") |
+
+- **Selections** (`Selection`, `SelectionSubmission` tables): `POST/DELETE /public/selections/{photoId}`,
+  `PUT …/comment`, `POST /public/selections/submit`. The limit and the lock are enforced by the API (409).
+  Admin: `GET /events/{id}/selections`, `…/selections/export?format=names|csv|zip`, `POST /share-links/{id}/selection/unlock`.
+  `names` = one comma-separated line without extensions → Lightroom: Library → Filter → Text → Filename → Contains.
+  CSV fields starting with `= + - @` are prefixed with `'` (no Excel formula injection).
+- **Watermark**: text drawn bottom-right on the `web` image only (thumbs and originals stay clean), at resize time.
+  Changing it → "Rebuild images" re-renders `web`/`thumb` from the originals in the background (faces untouched).
+- **Branding**: theme colour + a title font from a fixed list (validated by the API, loaded from Google Fonts).
+- **Expiry**: after `Event.ExpiresAt` all guest links close at once (`Event.IsOpen`); an hourly Hangfire job
+  (`PurgeJobs`) deletes guests, selfie files, reference embeddings, matches and every face embedding of the event,
+  and sets `PurgedAt`. Photos, collections and album picks stay.
+
 ## 8. Configuration
 
 All secrets via `.env` → environment variables → ASP.NET Core configuration

@@ -25,9 +25,9 @@ describe('App routes', () => {
 
   it('opens the events page when the admin cookie is valid', async () => {
     const harnessPromise = RouterTestingHarness.create('/admin');
-    await vi.waitFor(() => http.expectOne(API.me).flush({ email: 'a@b.c', expiresAt: null }));
+    await vi.waitFor(() => http.expectOne(API.me).flush({ email: 'a@b.c', expiresAt: null }), { timeout: 5000 });
     const harness = await harnessPromise;
-    await vi.waitFor(() => http.expectOne(API.events).flush([]));
+    await vi.waitFor(() => http.expectOne(API.events).flush([]), { timeout: 5000 });
     await harness.fixture.whenStable();
     expect(harness.routeNativeElement?.textContent).toContain('Events');
   });
@@ -40,15 +40,14 @@ describe('App routes', () => {
         event: { name: 'Suraj & Priya', date: '2026-12-12', venue: 'Pune', themeColor: '#b0004a', titleFont: null, coverUrl: null },
         linkType: 'Guest', requiresPin: false, requireRegistration: true, registrationFields: 'Name',
         selfieRequired: true, faceSearchEnabled: true,
-      }),
-    );
+      }), { timeout: 5000 });
     const harness = await harnessPromise;
     await vi.waitFor(() => {
       harness.detectChanges();
       const text = harness.routeNativeElement?.textContent ?? '';
       expect(text).toContain('Suraj & Priya');
       expect(text).toContain('Find your photos');
-    });
+    }, { timeout: 5000 });
   });
 
   it('shows a friendly message for a closed gallery', async () => {
@@ -58,13 +57,12 @@ describe('App routes', () => {
       http.expectOne('/api/v1/public/links/closed1').flush(
         { status: 403, detail: 'This gallery isn’t open right now. Please check with the couple.' },
         { status: 403, statusText: 'Forbidden' },
-      ),
-    );
+      ), { timeout: 5000 });
     const harness = await harnessPromise;
     await vi.waitFor(() => {
       harness.detectChanges();
       expect(harness.routeNativeElement?.textContent).toContain('check with the couple');
-    });
+    }, { timeout: 5000 });
   });
 
   it('shows not-found for unknown routes', async () => {

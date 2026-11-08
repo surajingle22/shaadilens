@@ -102,4 +102,8 @@ public sealed class EventsController(EventService events, PhotoService photos) :
 
     [HttpPost("{id:guid}/photos/retry-failed")]
     public async Task<object> RetryFailed(Guid id, CancellationToken ct) => new { queued = await photos.RetryFailedAsync(id, ct) };
+
+    /// <summary>Re-render web/thumb images with the current watermark setting (background jobs).</summary>
+    [HttpPost("{id:guid}/photos/rebuild-images")]
+    public async Task<object> RebuildImages(Guid id, CancellationToken ct) => new { queued = await photos.RebuildImagesAsync(id, ct) };
 }

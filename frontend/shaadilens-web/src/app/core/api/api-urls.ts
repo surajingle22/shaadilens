@@ -49,6 +49,12 @@ export const API = {
   rematch: (eventId: string) => `${v1}/events/${eventId}/rematch`,
   guestNotify: (id: string) => `${v1}/guests/${id}/notify`,
 
+  selections: (eventId: string) => `${v1}/events/${eventId}/selections`,
+  selectionExport: (eventId: string, format: 'names' | 'csv' | 'zip', linkId?: string) =>
+    `${v1}/events/${eventId}/selections/export?format=${format}${linkId ? '&linkId=' + linkId : ''}`,
+  selectionUnlock: (linkId: string) => `${v1}/share-links/${linkId}/selection/unlock`,
+  rebuildImages: (eventId: string) => `${v1}/events/${eventId}/photos/rebuild-images`,
+
   settings: `${v1}/settings`,
   testEmail: `${v1}/settings/test-email`,
   vapidKeys: `${v1}/settings/vapid-keys`,

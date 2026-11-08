@@ -4,7 +4,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { GuestApi, GuestPhoto, GuestSessionInfo } from '../../core/api/guest-api';
+import { GuestApi, GuestPhoto, GuestSessionInfo, SelectionState } from '../../core/api/guest-api';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Notify, errorMessage } from '../../core/notify';
 import { SelfieStep } from '../steps/selfie-step';
@@ -40,7 +40,13 @@ export class GuestGallery {
   /** Session ended (deleted data / link closed); carries a message for the landing page. */
   readonly signedOut = output<string>();
 
-  protected readonly isFull = computed(() => this.session().linkType === 'Full');
+  /** Full and Selection links show the whole gallery (no selfie). */
+  protected readonly isFull = computed(() => this.session().linkType === 'Full' || this.session().linkType === 'Selection');
+  /** Selection link: the couple hearts photos for the album. */
+  protected readonly isSelection = computed(() => this.session().linkType === 'Selection');
+  protected readonly selection = signal<SelectionState | null>(null);
+  /** photoId → comment, for quick lookups in the grid and lightbox. */
+  protected readonly picks = computed(() => new Map((this.selection()?.items ?? []).map((i) => [i.photoId, i.comment] as const)));
   protected readonly collections = resource({ loader: () => this.api.collections() });
   protected readonly probable = resource({
     params: () => (this.isFull() ? undefined : true),
@@ -71,7 +77,10 @@ export class GuestGallery {
 
   constructor() {
     effect(() => this.selfieCount.set(this.session().selfieCount));
-    afterNextRender(() => void this.goLive());
+    afterNextRender(() => {
+      void this.goLive();
+      if (this.isSelection()) this.api.selection().then((s) => this.selection.set(s), (err) => this.handle(err));
+    });
     effect(() => {
       this.collectionId();
       untracked(() => void this.reset());
@@ -86,6 +95,44 @@ export class GuestGallery {
       if (el) observer.observe(el);
       destroyRef.onDestroy(() => observer.disconnect());
     });
+  }
+
+  // ---------- Selection link ----------
+
+  /** Heart / un-heart. The server enforces the limit and the lock; we show its message (e.g. "40 of 40"). */
+  protected async toggleSelect(photo: GuestPhoto, e?: Event): Promise<void> {
+    e?.stopPropagation(); // the heart sits on top of the thumbnail: don't open the lightbox
+    const s = this.selection();
+    if (s?.locked) {
+      this.notify.ok('Your selection was submitted. Ask the photographer if you need changes.');
+      return;
+    }
+    try {
+      this.selection.set(await (this.picks().has(photo.id) ? this.api.unselect(photo.id) : this.api.select(photo.id)));
+    } catch (err) {
+      this.handle(err);
+    }
+  }
+
+  protected async editComment(photo: GuestPhoto): Promise<void> {
+    const text = prompt('Note for the photographer (e.g. “crop tighter”, “black & white”):', this.picks().get(photo.id) ?? '');
+    if (text === null) return;
+    try {
+      this.selection.set(await this.api.comment(photo.id, text.trim() || null));
+    } catch (err) {
+      this.handle(err);
+    }
+  }
+
+  protected async submitSelection(): Promise<void> {
+    const s = this.selection();
+    if (!s || !confirm(`Send your ${s.count} photo${s.count === 1 ? '' : 's'} to the photographer? You can’t change them after this.`)) return;
+    try {
+      this.selection.set(await this.api.submitSelection());
+      this.notify.ok('Sent! The photographer has your selection.');
+    } catch (err) {
+      this.handle(err);
+    }
   }
 
   /** Live connection: Guest links hear "new photos of you", Full links hear "new photo in the gallery". */

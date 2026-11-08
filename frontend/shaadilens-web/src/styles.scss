@@ -70,3 +70,6 @@ body {
 .mat-icon {
   vertical-align: middle;
 }
+
+/* Material Symbols draw outline glyphs by default; .filled switches on the FILL axis (e.g. a solid ❤). */
+.mat-icon.filled, .filled .mat-icon { font-variation-settings: 'FILL' 1; }

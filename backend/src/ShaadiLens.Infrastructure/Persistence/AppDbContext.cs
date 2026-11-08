@@ -19,6 +19,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<UploadSession> UploadSessions => Set<UploadSession>();
+    public DbSet<Selection> Selections => Set<Selection>();
+    public DbSet<SelectionSubmission> SelectionSubmissions => Set<SelectionSubmission>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -82,6 +84,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
             e.Property(x => x.ImageKey).HasMaxLength(300);
             e.HasIndex(x => x.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
+        });
+
+        b.Entity<Selection>(e =>
+        {
+            // One heart per photo per Selection link.
+            e.HasIndex(x => new { x.ShareLinkId, x.PhotoId }).IsUnique();
+            e.Property(x => x.SelectedBy).HasMaxLength(100);
+            e.Property(x => x.Comment).HasMaxLength(500);
+            e.HasOne<ShareLink>().WithMany().HasForeignKey(x => x.ShareLinkId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Photo).WithMany().HasForeignKey(x => x.PhotoId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<SelectionSubmission>(e =>
+        {
+            e.HasIndex(x => x.ShareLinkId).IsUnique();
+            e.Property(x => x.SubmittedBy).HasMaxLength(100);
+            e.HasOne<ShareLink>().WithMany().HasForeignKey(x => x.ShareLinkId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<GuestMatch>(e =>

@@ -66,7 +66,7 @@ public sealed class NotifyJobs(
 
         var link = await db.ShareLinks.AsNoTracking().Include(l => l.Event).FirstOrDefaultAsync(l => l.Id == guest.ShareLinkId, ct);
         var now = time.GetUtcNow();
-        if (link?.Event is null || !link.IsUsable(now) || !link.Event.IsPublished)
+        if (link?.Event is null || !link.IsUsable(now) || !link.Event.IsOpen(now))
         {
             await db.SaveChangesAsync(ct);
             return;

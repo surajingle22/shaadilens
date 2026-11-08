@@ -47,3 +47,5 @@ form.panel, section.panel { display: flex; flex-direction: column; }
 .legend .match { background: var(--mat-sys-primary); }
 .legend .maybe { background: var(--mat-sys-tertiary); }
 .legend .below { background: var(--mat-sys-outline-variant); }
+.watermark { align-items: baseline; flex-wrap: wrap; }
+.watermark > mat-checkbox { flex: 0 0 auto; }

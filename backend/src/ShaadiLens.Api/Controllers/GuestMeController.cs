@@ -1,6 +1,5 @@
-using System.IO.Compression;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http.Features;
+using ShaadiLens.Api.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using ShaadiLens.Api.Auth;
@@ -135,22 +134,7 @@ public sealed class GuestMeController(GuestAccessService guests, TokenService to
 
         var entries = await guests.GetZipEntriesAsync(ctx, collectionId, AuthSetup.Ip(HttpContext), ct);
 
-        Response.ContentType = "application/zip";
-        Response.Headers.ContentDisposition = $"attachment; filename=\"wedding-photos-{DateTime.UtcNow:yyyyMMdd}.zip\"";
-        // ZipArchive writes synchronously when it finishes an entry; allow that for this response only.
-        HttpContext.Features.Get<IHttpBodyControlFeature>()!.AllowSynchronousIO = true;
-
-        using var zip = new ZipArchive(Response.Body, ZipArchiveMode.Create, leaveOpen: true);
-        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in entries)
-        {
-            var name = UniqueName(used, $"{Safe(entry.CollectionName)}/{Path.ChangeExtension(Safe(entry.FileName), Path.GetExtension(entry.StorageKey))}");
-            // JPEGs are already compressed — storing them as-is is fastest.
-            var zipEntry = zip.CreateEntry(name, CompressionLevel.NoCompression);
-            await using var target = zipEntry.Open();
-            await using var source = await storage.OpenReadAsync(entry.StorageKey, ct);
-            await source.CopyToAsync(target, ct);
-        }
+        await ZipStreamer.WriteAsync(HttpContext, storage, entries, $"wedding-photos-{DateTime.UtcNow:yyyyMMdd}.zip", ct);
     }
 
     [HttpDelete("me")]
@@ -160,13 +144,4 @@ public sealed class GuestMeController(GuestAccessService guests, TokenService to
         return NoContent();
     }
 
-    private static string Safe(string s) => string.Concat(s.Split(Path.GetInvalidFileNameChars().Append('/').Append('\\').ToArray())).Trim();
-
-    private static string UniqueName(HashSet<string> used, string name)
-    {
-        var candidate = name;
-        for (var i = 2; !used.Add(candidate); i++)
-            candidate = $"{Path.ChangeExtension(name, null)} ({i}){Path.GetExtension(name)}";
-        return candidate;
-    }
 }

@@ -28,7 +28,7 @@ type Step = 'loading' | 'landing' | 'pin' | 'details' | 'selfie' | 'matching' | 
   selector: 'app-guest-page',
   imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, Landing, PinStep, RegisterStep, SelfieStep, GuestGallery],
   template: `
-    <div class="guest" [style.--mat-sys-primary]="theme()" [style.--mat-sys-primary-container]="themeSoft()">
+    <div class="guest" [style.--mat-sys-primary]="theme()" [style.--mat-sys-primary-container]="themeSoft()" [style.--title-font]="titleFontCss()">
       @switch (step()) {
         @case ('loading') {
           <div class="center"><mat-spinner diameter="40" /></div>
@@ -96,7 +96,20 @@ export class GuestPage {
   /** A very light tint of the theme colour for containers. */
   protected readonly themeSoft = computed(() => (this.theme() ? `color-mix(in srgb, ${this.theme()} 14%, white)` : null));
 
+  /** The couple's title font (from a fixed, server-validated list), loaded from Google Fonts on demand. */
+  private readonly titleFont = computed(() => this.link()?.event.titleFont ?? this.session()?.event.titleFont ?? null);
+  protected readonly titleFontCss = computed(() => (this.titleFont() ? `'${this.titleFont()}', Georgia, serif` : null));
+
   constructor() {
+    effect(() => {
+      const font = this.titleFont();
+      if (!font || document.querySelector(`link[data-title-font="${font}"]`)) return;
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}&display=swap`;
+      css.dataset['titleFont'] = font;
+      document.head.appendChild(css);
+    });
     effect(() => {
       const token = this.token();
       untracked(() => void this.start(token));

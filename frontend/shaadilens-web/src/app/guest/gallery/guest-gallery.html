@@ -1,7 +1,7 @@
 <header class="top">
   <div class="titles">
     <span class="event">{{ session().event.name }}</span>
-    <h1>{{ isFull() ? 'All photos' : greeting() }}</h1>
+    <h1>{{ isSelection() ? 'Pick your favourites' : isFull() ? 'All photos' : greeting() }}</h1>
   </div>
   <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="More options"><mat-icon>more_vert</mat-icon></button>
   <mat-menu #menu="matMenu">
@@ -79,24 +79,50 @@
 
 <div class="grid">
   @for (p of photos(); track p.id; let i = $index) {
-    <button class="cell" (click)="open(photos(), i, 'mine')" [attr.aria-label]="'Photo ' + (i + 1)">
-      <img [src]="p.thumbUrl" alt="" loading="lazy" />
-    </button>
+    <div class="cell-wrap">
+      <button class="cell" (click)="open(photos(), i, 'mine')" [attr.aria-label]="'Photo ' + (i + 1)">
+        <img [src]="p.thumbUrl" alt="" loading="lazy" />
+      </button>
+      @if (isSelection()) {
+        <button class="pick" [class.on]="picks().has(p.id)" (click)="toggleSelect(p, $event)"
+                [attr.aria-label]="picks().has(p.id) ? 'Remove from selection' : 'Add to selection'">
+          <mat-icon [class.filled]="picks().has(p.id)">favorite</mat-icon>
+        </button>
+        @if (picks().get(p.id)) { <mat-icon class="has-note">sticky_note_2</mat-icon> }
+      }
+    </div>
   }
 </div>
+
+<!-- Selection link: "37 / 40" + Submit, always visible at the bottom -->
+@if (isSelection() && selection(); as s) {
+  <div class="pick-bar" [class.done]="s.locked">
+    @if (s.locked) {
+      <mat-icon>task_alt</mat-icon> <span>Selection sent ({{ s.count }} photos). Thank you!</span>
+    } @else {
+      <mat-icon class="filled">favorite</mat-icon>
+      <span><strong>{{ s.count }}</strong>{{ s.limit ? ' / ' + s.limit : '' }} selected</span>
+      <button mat-flat-button (click)="submitSelection()" [disabled]="!s.count">Submit selection</button>
+    }
+  </div>
+}
 
 <div #sentinel class="sentinel">
   @if (loading() && photos().length) { <mat-progress-bar mode="indeterminate" /> }
 </div>
 
+@if (!isFull()) {
 <footer class="foot">
   <p>Your selfie is used only to find your photos at this event.</p>
 </footer>
+}
 
 @if (lightbox(); as lb) {
   <app-lightbox [photos]="lb.list" [startIndex]="lb.index" [canDownload]="session().allowSingleDownload" [feedback]="lb.kind"
                 (closed)="lightbox.set(null)" (download)="download($event)" (nearEnd)="lb.list === photos() && loadMore()"
-                (confirm)="confirm($event)" (reject)="reject($event)" />
+                (confirm)="confirm($event)" (reject)="reject($event)"
+                [selectable]="isSelection() && !selection()?.locked" [picks]="picks()"
+                (toggleSelect)="toggleSelect($event)" (editComment)="editComment($event)" />
 }
 
 @if (addingSelfie()) {

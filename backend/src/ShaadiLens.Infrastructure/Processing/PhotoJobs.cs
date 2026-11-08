@@ -54,7 +54,7 @@ public sealed class PhotoJobs(
             var sw = Stopwatch.StartNew();
             try
             {
-                await images.PrepareAsync(photo, ct);
+                await images.PrepareAsync(photo, await WatermarkAsync(photo.EventId, ct), ct);
             }
             catch (ImageMagick.MagickException ex)
             {
@@ -78,6 +78,24 @@ public sealed class PhotoJobs(
 
         jobs.Enqueue<PhotoJobs>(j => j.DetectFacesAsync(photoId, null, CancellationToken.None));
     }
+
+    /// <summary>
+    /// Re-renders web + thumb from the original (e.g. after turning the watermark on/off). Faces are not touched.
+    /// Browsers that already cached the old image may show it for up to an hour (signed URLs rotate hourly).
+    /// </summary>
+    [Queue("default")]
+    [AutomaticRetry(Attempts = MaxAttempts - 1, OnAttemptsExceeded = AttemptsExceededAction.Delete)]
+    public async Task RebuildImagesAsync(Guid photoId, CancellationToken ct)
+    {
+        var photo = await db.Photos.FirstOrDefaultAsync(p => p.Id == photoId, ct);
+        if (photo?.StorageKeyWeb is null) return; // never processed (or deleted): the normal pipeline handles it
+        await images.PrepareAsync(photo, await WatermarkAsync(photo.EventId, ct), ct);
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<string?> WatermarkAsync(Guid eventId, CancellationToken ct) =>
+        await db.Events.AsNoTracking().Where(e => e.Id == eventId)
+            .Select(e => e.WatermarkEnabled ? e.WatermarkText : null).FirstOrDefaultAsync(ct);
 
     [Queue("faces")]
     [AutomaticRetry(Attempts = MaxAttempts - 1, OnAttemptsExceeded = AttemptsExceededAction.Delete)]
@@ -185,6 +203,9 @@ public sealed class HangfirePhotoPipelineScheduler(IBackgroundJobClient jobs) : 
 
     public void EnqueueFaceDetection(Guid photoId) =>
         jobs.Enqueue<PhotoJobs>(j => j.DetectFacesAsync(photoId, null, CancellationToken.None));
+
+    public void EnqueueImageRebuild(Guid photoId) =>
+        jobs.Enqueue<PhotoJobs>(j => j.RebuildImagesAsync(photoId, CancellationToken.None));
 
     public void EnqueueRematchEvent(Guid eventId) =>
         jobs.Enqueue<MatchJobs>(j => j.RematchEventAsync(eventId, CancellationToken.None));

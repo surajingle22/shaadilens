@@ -19,8 +19,18 @@ public class Event
     /// <summary>Nothing is visible to guests until the admin publishes.</summary>
     public bool IsPublished { get; set; }
     public bool FaceSearchEnabled { get; set; } = true;
+    /// <summary>After this, guest links stop working and face data (selfies, embeddings) is purged.</summary>
     public DateTimeOffset? ExpiresAt { get; set; }
+    /// <summary>When the expiry job deleted the event's face data. Photos and selections are kept.</summary>
+    public DateTimeOffset? PurgedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Guests can open links: published and not expired.</summary>
+    public bool IsOpen(DateTimeOffset now) => IsPublished && (ExpiresAt is null || ExpiresAt > now);
+
+    /// <summary>Font names the guest pages can load (Google Fonts, free). Validated so nothing else gets in.</summary>
+    public static readonly string[] TitleFonts =
+        ["Playfair Display", "Cormorant Garamond", "Great Vibes", "Dancing Script", "Marcellus", "Poppins"];
 
     /// <summary>Per-event face matching thresholds (stored in the Events table as owned columns).</summary>
     public FaceSettings FaceSettings { get; set; } = new();

@@ -88,6 +88,13 @@ try
     app.MapControllers();
     app.MapHub<EventsHub>(EventsHub.Path);
 
+    // Hourly privacy clean-up of expired events (only where this process runs the job server).
+    if (app.Configuration.GetValue("Processing:RunJobServer", true))
+    {
+        app.Services.GetRequiredService<IRecurringJobManager>().AddOrUpdate<ShaadiLens.Infrastructure.Processing.PurgeJobs>(
+            ShaadiLens.Infrastructure.Processing.PurgeJobs.RecurringJobId, j => j.PurgeExpiredAsync(CancellationToken.None), Cron.Hourly());
+    }
+
     // Background job dashboard (queues, retries, failures) — admin only.
     app.MapHangfireDashboard("/hangfire", new DashboardOptions
     {

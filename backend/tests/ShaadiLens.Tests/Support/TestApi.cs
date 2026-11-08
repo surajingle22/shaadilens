@@ -33,11 +33,14 @@ public static class TestApi
     }
 
     /// <summary>Uploads a generated JPEG and runs both pipeline jobs with the given fake faces.</summary>
-    public static async Task<Guid> AddProcessedPhotoAsync(ApiFactory factory, HttpClient admin, Guid eventId, Guid collectionId, params DetectedFace[] faces)
+    public static Task<Guid> AddProcessedPhotoAsync(ApiFactory factory, HttpClient admin, Guid eventId, Guid collectionId, params DetectedFace[] faces) =>
+        AddNamedPhotoAsync(factory, admin, eventId, collectionId, "p.jpg", faces);
+
+    public static async Task<Guid> AddNamedPhotoAsync(ApiFactory factory, HttpClient admin, Guid eventId, Guid collectionId, string fileName, params DetectedFace[] faces)
     {
         var bytes = TestImages.CameraJpeg(800, 600, orientation: 1, seed: Guid.NewGuid().ToString("N"));
         var init = (await (await admin.PostAsJsonAsync($"/api/v1/events/{eventId}/uploads",
-            new InitUploadRequest(collectionId, "p.jpg", bytes.Length))).Content.ReadFromJsonAsync<InitUploadResponse>(Json.Options))!;
+            new InitUploadRequest(collectionId, fileName, bytes.Length))).Content.ReadFromJsonAsync<InitUploadResponse>(Json.Options))!;
         for (var i = 0; i < init.TotalChunks; i++)
         {
             var start = i * init.ChunkSize;
