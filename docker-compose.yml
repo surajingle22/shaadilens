@@ -64,6 +64,7 @@ services:
       Push__PublicKey: ${VAPID_PUBLIC:-}
       Push__PrivateKey: ${VAPID_PRIVATE:-}
       Push__Subject: ${VAPID_SUBJECT:-mailto:admin@example.com}
+      Uploader__ApiKey: ${UPLOADER_API_KEY:-}
     volumes:
       - photos:/data/photos
     depends_on:

@@ -22,6 +22,10 @@ public static class AuthConstants
 {
     public const string AdminRole = "Admin";
     public const string GuestRole = "Guest";
+    /// <summary>The hot-folder uploader (API key): may upload, nothing else.</summary>
+    public const string UploaderRole = "Uploader";
+    /// <summary>Admin (cookie) or the uploader (API key).</summary>
+    public const string UploadPolicy = "Upload";
     public const string AdminPolicy = "Admin";
     public const string GuestPolicy = "Guest";
     /// <summary>HttpOnly cookie holding the admin JWT (JavaScript can't read it → safe from XSS token theft).</summary>

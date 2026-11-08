@@ -84,6 +84,28 @@ Guests get at most one message per 10 minutes ("12 new photos of you!"). Guests 
   to existing photos (background job). Browsers that already opened a photo may show the old one for up to an hour.
 - **Gallery closes on**: after that day guest links stop working, and within an hour all selfies and face data are
   deleted automatically. Photos and album picks stay. Extend the date *before* it passes if you need more time.
+
+## TV slideshow (venue screen)
+Share → create a **Full gallery link** with "Ask guests to fill a form" off → **TV slideshow**. Open it on the TV/laptop
+browser, click once for fullscreen. `?interval=8` changes the seconds per photo, `?collection=Sangeet` limits it to
+one collection. Keys: ← → · Space pause · F fullscreen · C next collection. New photos appear by themselves.
+
+## Hot-folder uploader (upload while you shoot)
+Uploads every new photo that lands in a folder (camera Wi-Fi card, tethering software, card reader) into one collection.
+1. Put a random key of 24+ characters in `.env`: `UPLOADER_API_KEY=…`, then `docker compose up -d api`.
+2. On the laptop with the photos (needs the .NET 10 SDK, or run it in Docker as below):
+   ```powershell
+   dotnet run --project backend/tools/HotFolderUploader -- --folder "D:\Camera" --event <event-slug> --collection Wedding --key <UPLOADER_API_KEY>
+   ```
+   Without a local SDK:
+   ```powershell
+   docker run --rm -it -v ${PWD}\backend:/src -v D:\Camera:/photos mcr.microsoft.com/dotnet/sdk:10.0 `
+     dotnet run --project /src/tools/HotFolderUploader -- --folder /photos --event <slug> --collection Wedding `
+     --api http://host.docker.internal:8080 --key <UPLOADER_API_KEY>
+   ```
+It waits until a file is completely written, uploads 2 at a time, retries on network errors, remembers what it sent
+(restarts don't re-upload), and the server skips exact duplicates anyway. `--once` uploads what's there and exits.
+The key can only upload — it can't see guests or change anything else.
 ## Backup / restore
 
 Everything lives in two Docker volumes: `shaadilens_pgdata` (database) and `shaadilens_photos` (files).

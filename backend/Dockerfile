@@ -9,6 +9,7 @@ COPY src/ShaadiLens.Application/ShaadiLens.Application.csproj       src/ShaadiLe
 COPY src/ShaadiLens.Domain/ShaadiLens.Domain.csproj                 src/ShaadiLens.Domain/
 COPY src/ShaadiLens.Infrastructure/ShaadiLens.Infrastructure.csproj src/ShaadiLens.Infrastructure/
 COPY tests/ShaadiLens.Tests/ShaadiLens.Tests.csproj                 tests/ShaadiLens.Tests/
+COPY tools/HotFolderUploader/HotFolderUploader.csproj               tools/HotFolderUploader/
 RUN dotnet restore ShaadiLens.sln
 
 COPY . .

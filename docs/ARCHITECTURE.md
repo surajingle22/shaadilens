@@ -212,6 +212,16 @@ pipeline is now `Uploaded → Resized → FacesDetected → Matched`.
   (`PurgeJobs`) deletes guests, selfie files, reference embeddings, matches and every face embedding of the event,
   and sets `PurgedAt`. Photos, collections and album picks stay.
 
+## 7d. TV slideshow & hot-folder uploader (Phase 2e)
+
+- **`/tv/{token}`** (Angular `tv/tv-page.ts`): signs in as an anonymous Full-link viewer, loads all photos of the
+  chosen collection, cross-fades with a slow zoom, keyboard/remote control, Screen Wake Lock, re-joins SignalR
+  (`PhotoAdded` → shown next) and refreshes the list every 20 min because signed media URLs live one hour.
+- **`backend/tools/HotFolderUploader`**: .NET console app. FileSystemWatcher + 30 s rescan → "stable" check (size
+  unchanged 2 s and file openable) → the same chunked upload API as the web uploader → local state file.
+  Auth: `X-Api-Key` = `UPLOADER_API_KEY` → role `Uploader`, accepted only by the `Upload` policy (upload endpoints +
+  `GET /api/v1/uploader/targets`). Key compared in constant time; empty/short key = feature off.
+
 ## 8. Configuration
 
 All secrets via `.env` → environment variables → ASP.NET Core configuration

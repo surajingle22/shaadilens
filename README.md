@@ -6,7 +6,16 @@ Runs entirely on one machine with Docker Compose — no paid APIs, no cloud AI.
 > **Privacy note:** face embeddings are biometric data. This app is meant for a private family event:
 > guests give explicit consent, can delete their data at any time, and data is purged when the event expires.
 
-**Status:** Phase 1 in progress (Phase 1 complete — MVP gallery + face search) — see [docs/SPEC.md](docs/SPEC.md) §12.
+**Status:** Phase 2 complete — live matching, feedback, notifications, couple features, people, TV, hot folder.
+See [docs/SPEC.md](docs/SPEC.md) §12.
+
+## What it does
+- **Guests** scan a QR, take a selfie, see only their photos; "That's me / Not me", "Find more", a second selfie,
+  "Notify me" (Web Push / email), download single or ZIP, delete their data. New photos arrive live.
+- **Links**: Guest (selfie), VIP (selfie, no form), Full gallery, Selection (the couple hearts album picks).
+- **Admin**: chunked uploads (+ a hot-folder uploader for the camera), live processing, Match Review,
+  threshold preview, People clusters, Selections export (Lightroom/CSV/ZIP), watermark, branding, expiry purge,
+  QR posters, TV slideshow (`/tv/{token}`).
 
 ## Stack
 .NET 10 · EF Core + PostgreSQL 16 + pgvector · Hangfire · Magick.NET · Python FastAPI + InsightFace (`buffalo_l`, CPU) · Angular 22 + Material · nginx · Docker Compose
@@ -53,3 +62,4 @@ cd frontend/shaadilens-web; npm install; npm start     # http://localhost:4200 (
 - [Architecture](docs/ARCHITECTURE.md)
 - [How the face matching works](docs/AI-PIPELINE.md)
 - [Runbook](docs/RUNBOOK.md)
+- Day-to-day: notifications, album selection, watermark, TV slideshow, hot-folder uploader → [Runbook](docs/RUNBOOK.md)

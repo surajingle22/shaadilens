@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Hangfire.Dashboard;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
@@ -56,11 +57,17 @@ public static class AuthSetup
                         return Task.CompletedTask;
                     },
                 };
-            });
+            })
+            .AddScheme<AuthenticationSchemeOptions, ApiKeyHandler>(ApiKeyHandler.SchemeName, null);
+        services.Configure<UploaderOptions>(config.GetSection(UploaderOptions.Section));
 
         services.AddAuthorizationBuilder()
             .AddPolicy(AuthConstants.AdminPolicy, p => p.RequireRole(AuthConstants.AdminRole))
-            .AddPolicy(AuthConstants.GuestPolicy, p => p.RequireRole(AuthConstants.GuestRole));
+            .AddPolicy(AuthConstants.GuestPolicy, p => p.RequireRole(AuthConstants.GuestRole))
+            // Uploads: the admin cookie/JWT, or the hot-folder uploader's API key.
+            .AddPolicy(AuthConstants.UploadPolicy, p => p
+                .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme, ApiKeyHandler.SchemeName)
+                .RequireRole(AuthConstants.AdminRole, AuthConstants.UploaderRole));
 
         services.AddSingleton<PinAttemptLimiter>();
         services.AddRateLimiter(o =>

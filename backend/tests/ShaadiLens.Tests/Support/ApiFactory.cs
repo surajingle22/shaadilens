@@ -36,6 +36,7 @@ public sealed class ApiFactory(PostgresFixture pg) : WebApplicationFactory<Progr
 {
     public const string AdminEmail = "admin@test.local";
     public const string AdminPassword = "correct horse battery staple";
+    public const string UploaderKey = "test-uploader-key-0123456789abcdef";
 
     public string StorageRoot { get; } = Path.Combine(Path.GetTempPath(), "shaadilens-tests", Guid.NewGuid().ToString("N"));
     public FakeFaceEngine Faces { get; } = new();
@@ -54,6 +55,7 @@ public sealed class ApiFactory(PostgresFixture pg) : WebApplicationFactory<Progr
         builder.UseSetting("Jwt:Secret", "test-jwt-secret-0123456789-0123456789-abcdef");
         builder.UseSetting("Media:SigningKey", "test-media-key-0123456789-0123456789-abcdef");
         builder.UseSetting("Uploads:ChunkSizeBytes", (64 * 1024).ToString()); // small chunks → multi-chunk uploads in tests
+        builder.UseSetting("Uploader:ApiKey", UploaderKey);
 
         builder.ConfigureTestServices(s =>
         {
@@ -152,16 +154,20 @@ public sealed class FakeFaceEngine : IFaceEngine
     }
 }
 
+/// <summary>Records what would be queued. Thread-safe: parallel uploads (hot-folder uploader) enqueue at once.</summary>
 public sealed class RecordingScheduler : IPhotoPipelineScheduler
 {
+    private readonly Lock _lock = new();
     public List<Guid> Processing { get; } = [];
     public List<Guid> FaceDetection { get; } = [];
-    public void EnqueueProcessing(Guid photoId) => Processing.Add(photoId);
-    public void EnqueueFaceDetection(Guid photoId) => FaceDetection.Add(photoId);
     public List<Guid> Rebuild { get; } = [];
-    public void EnqueueImageRebuild(Guid photoId) => Rebuild.Add(photoId);
     public List<Guid> Clustering { get; } = [];
-    public void EnqueueClustering(Guid eventId, float eps, int minSamples) => Clustering.Add(eventId);
     public List<Guid> Rematch { get; } = [];
-    public void EnqueueRematchEvent(Guid eventId) => Rematch.Add(eventId);
+
+    private void Add(List<Guid> list, Guid id) { lock (_lock) list.Add(id); }
+    public void EnqueueProcessing(Guid photoId) => Add(Processing, photoId);
+    public void EnqueueFaceDetection(Guid photoId) => Add(FaceDetection, photoId);
+    public void EnqueueImageRebuild(Guid photoId) => Add(Rebuild, photoId);
+    public void EnqueueClustering(Guid eventId, float eps, int minSamples) => Add(Clustering, eventId);
+    public void EnqueueRematchEvent(Guid eventId) => Add(Rematch, eventId);
 }

@@ -86,6 +86,9 @@
           <a mat-stroked-button [href]="urls.poster(link.id, 'a4')" download><mat-icon>print</mat-icon> Poster A4</a>
           <a mat-stroked-button [href]="urls.poster(link.id, 'a5')" download><mat-icon>print</mat-icon> A5</a>
           <a mat-stroked-button [href]="urls.qr(link.id)" download="qr.png"><mat-icon>qr_code_2</mat-icon> QR PNG</a>
+          @if (link.type === 'Full') {
+            <a mat-stroked-button [href]="'/tv/' + link.token" target="_blank" rel="noopener" matTooltip="Fullscreen slideshow for a TV or projector"><mat-icon>tv</mat-icon> TV slideshow</a>
+          }
           <button mat-stroked-button [matMenuTriggerFor]="more"><mat-icon>tune</mat-icon> Settings</button>
           <mat-menu #more="matMenu">
             <button mat-menu-item (click)="toggle(link, 'isActive', !link.isActive)">

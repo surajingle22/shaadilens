@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShaadiLens.Api\ShaadiLens.Api.csproj" />
+    <ProjectReference Include="..\..\tools\HotFolderUploader\HotFolderUploader.csproj" />
   </ItemGroup>
 
   <ItemGroup>

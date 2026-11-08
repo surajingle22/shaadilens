@@ -20,5 +20,7 @@ export const routes: Routes = [
   },
   { path: 'admin', loadChildren: () => import('./admin/admin.routes').then((m) => m.ADMIN_ROUTES) },
   { path: 'g', loadChildren: () => import('./guest/guest.routes').then((m) => m.GUEST_ROUTES) },
+  // /tv/:token — fullscreen slideshow for the venue screen (Full gallery link)
+  { path: 'tv/:token', loadComponent: () => import('./tv/tv-page').then((m) => m.TvPage) },
   { path: '**', loadComponent: () => import('./shared/not-found/not-found').then((m) => m.NotFound) },
 ];
