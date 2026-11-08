@@ -42,6 +42,11 @@ export const API = {
   guests: (eventId: string) => `${v1}/events/${eventId}/guests`,
   guest: (id: string) => `${v1}/guests/${id}`,
   guestSearch: (id: string) => `${v1}/guests/${id}/search`,
+  guestMatches: (id: string) => `${v1}/guests/${id}/matches`,
+  match: (id: string) => `${v1}/matches/${id}`,
+  selfieImage: (referenceId: string) => `${v1}/guest-references/${referenceId}/image`,
+  thresholdPreview: (eventId: string) => `${v1}/events/${eventId}/face-settings/preview`,
+  rematch: (eventId: string) => `${v1}/events/${eventId}/rematch`,
 
   hangfire: '/hangfire',
 } as const;

@@ -27,10 +27,14 @@ public sealed class GuestAccessService(
     IFaceMatcher matcher,
     IImageTools images,
     IMediaUrlSigner urls,
+    MatchFeedbackService feedback,
     TimeProvider time,
     ILogger<GuestAccessService> log)
 {
     private static readonly MatchStatus[] Shown = [MatchStatus.Auto, MatchStatus.Confirmed];
+
+    /// <summary>The first selfie + up to two extra ones ("a different angle").</summary>
+    public const int MaxSelfies = 3;
 
     // ---------- before login ----------
 
@@ -89,29 +93,14 @@ public sealed class GuestAccessService(
             ConsentGivenAt = selfie is not null ? time.GetUtcNow() : null,
         };
 
-        Vector? embedding = null;
-        byte[]? selfieJpeg = null;
-        if (selfie is not null)
-        {
-            selfieJpeg = await images.NormalizeSelfieAsync(selfie, ct);
-            var check = await faces.CheckSelfieAsync(new MemoryStream(selfieJpeg), ev.FaceSettings.MaxSelfieYaw, ct);
-            if (!check.Ok || check.Embedding is null)
-                throw new SelfieRejectedException(check.Code, check.Reason ?? "Please try another selfie.");
-            embedding = new Vector(check.Embedding);
-        }
+        var checkedSelfie = selfie is null ? null : await CheckSelfieAsync(ev, selfie, ct);
 
         db.Guests.Add(guest);
-        if (embedding is not null)
-        {
-            var selfieKey = StorageKeys.Selfie(ev.Id, guest.Id, Guid.CreateVersion7());
-            await storage.SaveAsync(selfieKey, new MemoryStream(selfieJpeg!), ct);
-            guest.SelfieKey = selfieKey;
-            guest.References.Add(new GuestReference { Embedding = embedding, Source = ReferenceSource.Selfie });
-        }
+        if (checkedSelfie is { } s) guest.SelfieKey = await SaveSelfieAsync(guest, s, ct);
         db.AuditLogs.Add(new AuditLog { Actor = $"guest:{guest.Id}", Action = "guest_registered", EntityId = link.Id.ToString(), Ip = ip });
         await db.SaveChangesAsync(ct);
 
-        var summary = embedding is not null ? await matcher.SearchForGuestAsync(guest.Id, ct) : null;
+        var summary = checkedSelfie is not null ? await matcher.SearchForGuestAsync(guest.Id, ct) : null;
         log.LogInformation("Guest {GuestId} registered via link {LinkId}: {Auto} auto / {Probable} probable matches",
             guest.Id, link.Id, summary?.Auto ?? 0, summary?.Probable ?? 0);
         return (new GuestContext(ev.Id, link.Id, guest.Id, link.Type), summary);
@@ -127,12 +116,14 @@ public sealed class GuestAccessService(
             : await VisibleMatches(ctx, guest.Id)
                 .GroupBy(m => m.Status).Select(g => new { g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        var selfies = guest is null ? 0
+            : await db.GuestReferences.CountAsync(r => r.GuestId == guest.Id && r.Source == ReferenceSource.Selfie, ct);
         return new GuestSessionDto(
             Branding(ev), link.Type, guest?.Name, guest?.SelfieKey is not null,
             link.AllowSingleDownload, link.AllowBulkDownload,
             counts.GetValueOrDefault(MatchStatus.Auto) + counts.GetValueOrDefault(MatchStatus.Confirmed),
             counts.GetValueOrDefault(MatchStatus.Probable),
-            guest?.LastSearchedAt);
+            guest?.LastSearchedAt, selfies, MaxSelfies);
     }
 
     /// <summary>"Your photos": Auto + Confirmed matches.</summary>
@@ -183,11 +174,55 @@ public sealed class GuestAccessService(
             .ToList();
     }
 
-    /// <summary>"Check for new photos": search again (e.g. after more photos were uploaded).</summary>
+    /// <summary>
+    /// "Find more photos of me": search again with ALL the guest's references — selfies plus every face they
+    /// confirmed — keeping the best similarity per face. New uploads already arrive by themselves (reverse
+    /// matching); this mainly helps after "That's me" or a second selfie.
+    /// </summary>
     public async Task<MatchSummary> RefreshAsync(GuestContext ctx, CancellationToken ct)
     {
         var guestId = RequireGuest(ctx);
         await OpenSessionAsync(ctx, ct);
+        return await matcher.SearchForGuestAsync(guestId, ct);
+    }
+
+    /// <summary>"Yes, that's me" (usually on a "Might be you?" photo).</summary>
+    public Task ConfirmAsync(GuestContext ctx, Guid photoId, CancellationToken ct) =>
+        DecideAsync(ctx, photoId, MatchStatus.Confirmed, ct);
+
+    /// <summary>"Not me": the photo disappears for this guest and never comes back.</summary>
+    public Task RejectAsync(GuestContext ctx, Guid photoId, CancellationToken ct) =>
+        DecideAsync(ctx, photoId, MatchStatus.Rejected, ct);
+
+    private async Task DecideAsync(GuestContext ctx, Guid photoId, MatchStatus decision, CancellationToken ct)
+    {
+        var guestId = RequireGuest(ctx);
+        await OpenSessionAsync(ctx, ct);
+        // Only photos this guest was matched with (and may currently see) can be decided on.
+        var match = await db.GuestMatches.FirstOrDefaultAsync(m =>
+                        m.GuestId == guestId && m.PhotoId == photoId && m.Photo!.EventId == ctx.EventId &&
+                        !m.Photo.IsHidden && !m.Photo.Collection!.IsHidden, ct)
+                    ?? throw new NotFoundException("Photo");
+        await feedback.SetDecisionAsync(match, decision, $"guest:{guestId}", ct);
+    }
+
+    /// <summary>
+    /// Extra selfie (a different angle, with/without glasses…): one more reference embedding, then search again.
+    /// </summary>
+    public async Task<MatchSummary> AddSelfieAsync(GuestContext ctx, Stream selfie, CancellationToken ct)
+    {
+        var guestId = RequireGuest(ctx);
+        var (_, ev, _) = await OpenSessionAsync(ctx, ct);
+        var guest = await db.Guests.FirstAsync(g => g.Id == guestId, ct);
+        if (guest.ConsentGivenAt is null) throw new ForbiddenException("Take your first selfie from the gallery link.");
+        if (!ev.FaceSearchEnabled) throw new ForbiddenException("Face search is turned off for this event.");
+        var selfies = await db.GuestReferences.CountAsync(r => r.GuestId == guestId && r.Source == ReferenceSource.Selfie, ct);
+        if (selfies >= MaxSelfies) throw new BadRequestException($"You already added {MaxSelfies} selfies. Try “Find more” instead.");
+
+        var s = await CheckSelfieAsync(ev, selfie, ct);
+        await SaveSelfieAsync(guest, s, ct);
+        await db.SaveChangesAsync(ct);
+        log.LogInformation("Guest {GuestId} added selfie #{Number}", guestId, selfies + 1);
         return await matcher.SearchForGuestAsync(guestId, ct);
     }
 
@@ -249,6 +284,31 @@ public sealed class GuestAccessService(
                 .AnyAsync(m => m.PhotoId == photoId && m.Status != MatchStatus.Rejected, ct);
 
     // ---------- helpers ----------
+
+    private sealed record CheckedSelfie(byte[] Jpeg, Vector Embedding);
+
+    /// <summary>Normalise (upright JPEG, no metadata) and let face-service check it. Throws SelfieRejectedException.</summary>
+    private async Task<CheckedSelfie> CheckSelfieAsync(Event ev, Stream selfie, CancellationToken ct)
+    {
+        var jpeg = await images.NormalizeSelfieAsync(selfie, ct);
+        var check = await faces.CheckSelfieAsync(new MemoryStream(jpeg), ev.FaceSettings.MaxSelfieYaw, ct);
+        if (!check.Ok || check.Embedding is null)
+            throw new SelfieRejectedException(check.Code, check.Reason ?? "Please try another selfie.");
+        return new CheckedSelfie(jpeg, new Vector(check.Embedding));
+    }
+
+    /// <summary>Stores the selfie file and adds its embedding as a reference (caller saves changes).</summary>
+    private async Task<string> SaveSelfieAsync(Guest guest, CheckedSelfie s, CancellationToken ct)
+    {
+        var key = StorageKeys.Selfie(guest.EventId, guest.Id, Guid.CreateVersion7());
+        await storage.SaveAsync(key, new MemoryStream(s.Jpeg), ct);
+        db.GuestReferences.Add(new GuestReference
+        {
+            GuestId = guest.Id, Embedding = s.Embedding, Source = ReferenceSource.Selfie, ImageKey = key,
+            CreatedAt = time.GetUtcNow(),
+        });
+        return key;
+    }
 
     private IQueryable<Photo> VisiblePhotos(Guid eventId) =>
         db.Photos.AsNoTracking().Where(p =>

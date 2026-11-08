@@ -69,6 +69,7 @@ public static class DependencyInjection
         // ---- Background jobs (Hangfire, stored in Postgres schema "hangfire") ----
         services.AddScoped<ImageProcessor>();
         services.AddScoped<PhotoJobs>();
+        services.AddScoped<MatchJobs>();
         services.AddScoped<IPhotoPipelineScheduler, HangfirePhotoPipelineScheduler>();
         services.AddHangfire(cfg => cfg
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)

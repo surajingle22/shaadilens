@@ -47,3 +47,11 @@ public sealed class SaveCollectionRequestValidator : AbstractValidator<SaveColle
 {
     public SaveCollectionRequestValidator() => RuleFor(x => x.Name).NotEmpty().MaximumLength(60);
 }
+
+/// <param name="Score">Lower edge of a 0.01-wide bucket.</param>
+public sealed record ScoreBucketDto(float Score, int Count);
+
+/// <param name="Matches">(guest, photo) pairs with similarity ≥ Threshold, excluding Confirmed/Rejected ones.</param>
+public sealed record ThresholdPreviewDto(
+    float Threshold, int Matches, int Confirmed, int Rejected, int Guests, float MinScore,
+    IReadOnlyList<ScoreBucketDto> Buckets, double ElapsedMs);

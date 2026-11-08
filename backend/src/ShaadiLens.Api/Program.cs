@@ -55,14 +55,16 @@ try
     }
 
     app.UseForwardedHeaders();
-    app.UseExceptionHandler();
-    app.UseStatusCodePages();
+    // Request logging goes OUTSIDE the exception handler, so it logs the final status code: an expected
+    // "selfie not usable" is logged as 422, not as a 500 with a stack trace.
     app.UseSerilogRequestLogging(o =>
         o.GetLevel = (http, _, ex) => ex is not null || http.Response.StatusCode >= 500
             ? Serilog.Events.LogEventLevel.Error
             : http.Request.Path.StartsWithSegments("/media") || http.Request.Path.StartsWithSegments("/health")
                 ? Serilog.Events.LogEventLevel.Verbose     // don't flood logs with thumbnail requests
                 : Serilog.Events.LogEventLevel.Information);
+    app.UseExceptionHandler();
+    app.UseStatusCodePages();
 
     if (app.Environment.IsDevelopment())
     {

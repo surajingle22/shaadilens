@@ -1,6 +1,6 @@
 namespace ShaadiLens.Domain.Enums;
 
-/// <summary>Photo processing pipeline: Uploaded → Resized → FacesDetected → Matched (Phase 2), or Failed.</summary>
+/// <summary>Photo processing pipeline: Uploaded → Resized → FacesDetected → Matched (compared with every registered guest), or Failed.</summary>
 public enum PhotoStatus
 {
     Uploaded = 0,
@@ -14,7 +14,7 @@ public enum ShareLinkType
 {
     /// <summary>Guest sees only photos they're in (selfie search).</summary>
     Guest = 0,
-    /// <summary>Selfie only, no registration form (Phase 2).</summary>
+    /// <summary>Selfie only, no registration form.</summary>
     VipGuest = 1,
     /// <summary>Whole gallery, by collection.</summary>
     Full = 2,
@@ -43,7 +43,7 @@ public enum MatchStatus
     Auto = 0,
     /// <summary>ProbableThreshold ≤ score &lt; MatchThreshold: shown in "Might be you?".</summary>
     Probable = 1,
-    /// <summary>Guest said "That's me" (Phase 2).</summary>
+    /// <summary>Guest (or admin) said "That's me". Never changed by automatic matching.</summary>
     Confirmed = 2,
     /// <summary>Guest said "Not me" — never shown again.</summary>
     Rejected = 3,

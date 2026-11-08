@@ -11,6 +11,9 @@ public interface IPhotoPipelineScheduler
 
     /// <summary>Queue only face detection again (e.g. after face-service was down).</summary>
     void EnqueueFaceDetection(Guid photoId);
+
+    /// <summary>Queue a fresh search for every guest of the event (e.g. after the admin changed thresholds).</summary>
+    void EnqueueRematchEvent(Guid eventId);
 }
 
 /// <summary>Creates short-lived signed URLs for photo files (see MediaController).</summary>

@@ -212,8 +212,47 @@ export interface GuestAdmin {
   hasSelfie: boolean;
   matchCount: number;
   probableCount: number;
+  confirmedCount: number;
+  rejectedCount: number;
+  /** Selfies + confirmed faces used for searching. */
+  referenceCount: number;
   createdAt: string;
   lastSearchedAt: string | null;
+}
+
+export type MatchStatus = 'Auto' | 'Probable' | 'Confirmed' | 'Rejected';
+
+/** One matched face, for Match Review. `face` is normalised 0..1. */
+export interface MatchReview {
+  id: string;
+  photoId: string;
+  thumbUrl: string;
+  webUrl: string;
+  width: number;
+  height: number;
+  face: { x: number; y: number; w: number; h: number };
+  score: number;
+  status: MatchStatus;
+  createdAt: string;
+}
+
+export interface GuestReview {
+  guest: GuestAdmin;
+  /** Reference ids with a selfie image (see API.selfieImage). */
+  selfies: string[];
+  matches: MatchReview[];
+}
+
+/** "At 0.40: 312 matches". Buckets are 0.01 wide (score = lower edge). */
+export interface ThresholdPreview {
+  threshold: number;
+  matches: number;
+  confirmed: number;
+  rejected: number;
+  guests: number;
+  minScore: number;
+  buckets: { score: number; count: number }[];
+  elapsedMs: number;
 }
 
 export interface MatchSummary {

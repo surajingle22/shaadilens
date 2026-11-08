@@ -149,7 +149,9 @@ QR → /g/{token} ─ GET  /public/links/{token}               branding, PIN?, f
                     → Guest + GuestReference + selfie file → pgvector search → GuestMatch rows
                     ← guest JWT
                ─ GET  /public/me, /me/photos, /me/probable, /collections, /gallery (Full links)
-               ─ POST /public/me/refresh                   "Check for new photos"
+               ─ POST /public/me/find-more                 "Find more photos of me" (all references)
+               ─ POST /public/me/matches/{photoId}/confirm|reject   "That's me" / "Not me"
+               ─ POST /public/me/selfie                    extra selfie (max 3)
                ─ POST /public/photos/{id}/download         → signed original URL
                ─ POST /public/me/download-all → GET /public/zip?ticket=…   streamed ZIP (no temp files)
                ─ DELETE /public/me                         guest, selfie file, embeddings, matches
@@ -157,8 +159,13 @@ QR → /g/{token} ─ GET  /public/links/{token}               branding, PIN?, f
 Admin: `/events/{id}/share-links` (Guest + Full in Phase 1), `/share-links/{id}/pin`, `qr.png`, `poster.png?size=a4|a5`
 (rendered with bundled OFL fonts), `/events/{id}/guests`, `PUT /events/{id}/cover`.
 
-Phase 2 adds the reverse direction for new uploads (new Face → all GuestReferences) + notifications.
-See `AI-PIPELINE.md`.
+Match Review: `GET /guests/{id}/matches` (selfies + every matched face with score and box), `PATCH /matches/{id}`
+`{status: Confirmed|Rejected}`, `GET /guest-references/{id}/image` (selfie, admin only, `no-store`).
+Thresholds: `GET /events/{id}/face-settings/preview?threshold=` (histogram), `POST /events/{id}/rematch` (Hangfire job).
+
+**Matching runs in both directions** (see `AI-PIPELINE.md` §4–4d): forward (one guest × all faces) on
+registration / "Find more" / rematch, reverse (one new photo × all guests) at the end of every face job, so the
+pipeline is now `Uploaded → Resized → FacesDetected → Matched`.
 
 ## 8. Configuration
 

@@ -10,6 +10,9 @@ import {
   EventSummary,
   FaceSettings,
   GuestAdmin,
+  GuestReview,
+  MatchStatus,
+  ThresholdPreview,
   InitUploadResponse,
   MatchSummary,
   PagedResult,
@@ -81,6 +84,15 @@ export class AdminApi {
   guests = (eventId: string) => this.get<GuestAdmin[]>(API.guests(eventId));
   deleteGuest = (id: string) => this.delete(API.guest(id));
   researchGuest = (id: string) => this.post<MatchSummary>(API.guestSearch(id), {});
+  guestReview = (id: string) => this.get<GuestReview>(API.guestMatches(id));
+  setMatchStatus = (matchId: string, status: Extract<MatchStatus, 'Confirmed' | 'Rejected'>) =>
+    firstValueFrom(this.http.patch<void>(API.match(matchId), { status }));
+
+  // ---------- thresholds ----------
+  /** Compares every guest with every face (a few seconds on big events). */
+  thresholdPreview = (eventId: string) => this.get<ThresholdPreview>(API.thresholdPreview(eventId));
+  /** Search again for every guest in the background (apply new thresholds to everyone). */
+  rematchAll = (eventId: string) => this.post<void>(API.rematch(eventId), {});
 
   // ---------- helpers ----------
   private get<T>(url: string) {

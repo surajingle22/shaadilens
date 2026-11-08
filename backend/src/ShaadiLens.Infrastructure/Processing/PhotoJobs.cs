@@ -21,6 +21,7 @@ namespace ShaadiLens.Infrastructure.Processing;
 ///   PrepareAsync      queue "default"  EXIF + orientation + web/thumb     (~0.5–1 s, CPU)
 ///        ↓ enqueues
 ///   DetectFacesAsync  queue "faces"    face-service → Face rows in pgvector (~0.4 s + 0.4 s/face)
+///                                      → reverse match against every registered guest (a few ms)
 ///
 /// Two queues so thumbnails appear quickly even while face detection is busy, and so the number of
 /// parallel face jobs (FACE_WORKERS) can be tuned separately.
@@ -32,6 +33,7 @@ public sealed class PhotoJobs(
     AppDbContext db,
     ImageProcessor images,
     IFaceEngine faceEngine,
+    IFaceMatcher matcher,
     IStorageService storage,
     IBackgroundJobClient jobs,
     ILogger<PhotoJobs> log)
@@ -101,7 +103,11 @@ public sealed class PhotoJobs(
             return;
         }
 
-        // Replace any faces from a previous run (idempotent re-processing). Matches on them cascade.
+        // Replace any faces from a previous run (idempotent re-processing). Matches on them cascade, so first
+        // remember the guests' own decisions ("That's me" / "Not me") and restore them after matching.
+        var decisions = await db.GuestMatches.AsNoTracking()
+            .Where(m => m.PhotoId == photoId && (m.Status == MatchStatus.Confirmed || m.Status == MatchStatus.Rejected))
+            .ToDictionaryAsync(m => m.GuestId, m => m.Status, ct);
         await db.Faces.Where(f => f.PhotoId == photoId).ExecuteDeleteAsync(ct);
 
         var kept = result.Faces
@@ -118,6 +124,9 @@ public sealed class PhotoJobs(
 
         log.LogInformation("Faces for photo {PhotoId}: {Kept}/{Found} kept in {Ms} ms (face-service {EngineMs} ms)",
             photoId, kept.Count, result.Faces.Count, sw.ElapsedMilliseconds, (int)result.ElapsedMs);
+
+        // Reverse search: does anyone who already registered appear in this new photo?
+        await matcher.MatchPhotoAsync(photoId, decisions, ct);
     }
 
     /// <summary>Stores the box normalised to 0..1 so it overlays correctly on thumb, web or original.</summary>
@@ -159,4 +168,31 @@ public sealed class HangfirePhotoPipelineScheduler(IBackgroundJobClient jobs) : 
 
     public void EnqueueFaceDetection(Guid photoId) =>
         jobs.Enqueue<PhotoJobs>(j => j.DetectFacesAsync(photoId, null, CancellationToken.None));
+
+    public void EnqueueRematchEvent(Guid eventId) =>
+        jobs.Enqueue<MatchJobs>(j => j.RematchEventAsync(eventId, CancellationToken.None));
+}
+
+/// <summary>Event-wide matching jobs.</summary>
+public sealed class MatchJobs(AppDbContext db, IFaceMatcher matcher, ILogger<MatchJobs> log)
+{
+    /// <summary>
+    /// Searches again for every guest of the event, e.g. after the admin changed the thresholds.
+    /// (Guests' own Confirmed/Rejected decisions are kept by the matcher.)
+    /// </summary>
+    [Queue("default")]
+    [AutomaticRetry(Attempts = 1)]
+    public async Task RematchEventAsync(Guid eventId, CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        var guestIds = await db.Guests.AsNoTracking()
+            .Where(g => g.EventId == eventId && g.References.Any())
+            .Select(g => g.Id).ToListAsync(ct);
+        foreach (var guestId in guestIds)
+        {
+            await matcher.SearchForGuestAsync(guestId, ct);
+            db.ChangeTracker.Clear(); // keep memory flat over hundreds of guests
+        }
+        log.LogInformation("Re-matched {Guests} guests of event {EventId} in {Ms} ms", guestIds.Count, eventId, sw.ElapsedMilliseconds);
+    }
 }

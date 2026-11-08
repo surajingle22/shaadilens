@@ -17,9 +17,14 @@ import { GuestPhoto } from '../../core/api/guest-api';
       <header>
         <button mat-icon-button (click)="closed.emit()" aria-label="Close"><mat-icon>close</mat-icon></button>
         <span class="count">{{ index() + 1 }} / {{ photos().length }}</span>
-        @if (canDownload()) {
-          <button mat-icon-button (click)="download.emit(current())" aria-label="Download"><mat-icon>download</mat-icon></button>
-        }
+        <span class="tools">
+          @if (feedback() === 'mine') {
+            <button mat-button class="not-me" (click)="reject.emit(current())"><mat-icon>person_off</mat-icon> Not me</button>
+          }
+          @if (canDownload()) {
+            <button mat-icon-button (click)="download.emit(current())" aria-label="Download"><mat-icon>download</mat-icon></button>
+          }
+        </span>
       </header>
 
       <div class="stage"
@@ -33,6 +38,13 @@ import { GuestPhoto } from '../../core/api/guest-api';
       }
       @if (index() < photos().length - 1) {
         <button mat-icon-button class="nav next" (click)="go(1)" aria-label="Next"><mat-icon>chevron_right</mat-icon></button>
+      }
+      @if (feedback() === 'maybe') {
+        <footer class="ask">
+          <span>Is this you?</span>
+          <button mat-stroked-button (click)="reject.emit(current())"><mat-icon>close</mat-icon> Not me</button>
+          <button mat-flat-button (click)="confirm.emit(current())"><mat-icon>check</mat-icon> Yes, that’s me</button>
+        </footer>
       }
       <ng-content />
     </div>
@@ -49,6 +61,13 @@ import { GuestPhoto } from '../../core/api/guest-api';
     .nav { position: absolute; top: 50%; translate: 0 -50%; background: rgb(0 0 0 / .35); }
     .prev { left: 8px; }
     .next { right: 8px; }
+    .tools { display: flex; align-items: center; gap: 4px; }
+    .not-me { color: #fff; }
+    .ask { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+      gap: 8px; padding: 16px 12px calc(16px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgb(0 0 0 / .75)); }
+    .ask span { width: 100%; text-align: center; font: var(--mat-sys-title-medium); }
+    .ask button { min-width: 140px; height: 44px; border-radius: 22px; }
+    .ask [mat-stroked-button] { color: #fff; border-color: rgb(255 255 255 / .6); }
     @media (pointer: coarse) { .nav { display: none; } }
   `,
 })
@@ -56,6 +75,10 @@ export class Lightbox {
   readonly photos = input.required<GuestPhoto[]>();
   readonly startIndex = input(0);
   readonly canDownload = input(false);
+  /** Which "is this you?" buttons to show: none (Full gallery), Not me ("Your photos"), or both ("Might be you?"). */
+  readonly feedback = input<'none' | 'mine' | 'maybe'>('none');
+  readonly confirm = output<GuestPhoto>();
+  readonly reject = output<GuestPhoto>();
   readonly closed = output<void>();
   readonly download = output<GuestPhoto>();
   /** Asks the parent to load more photos when we reach the end of what's loaded. */

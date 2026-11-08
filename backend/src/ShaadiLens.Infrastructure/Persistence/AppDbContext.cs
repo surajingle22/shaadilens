@@ -80,6 +80,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         b.Entity<GuestReference>(e =>
         {
             e.Property(x => x.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
+            e.Property(x => x.ImageKey).HasMaxLength(300);
             e.HasIndex(x => x.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
         });
 

@@ -1,6 +1,7 @@
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -12,7 +13,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router } from '@angular/router';
 import { AdminApi } from '../../../core/api/admin-api';
-import { Collection, EventDetail } from '../../../core/api/api.models';
+import { Collection, EventDetail, ThresholdPreview } from '../../../core/api/api.models';
 import { Notify } from '../../../core/notify';
 import { EventContext } from '../event-context';
 
@@ -103,7 +104,60 @@ export class EventOverview {
 
   protected async saveFaceSettings(): Promise<void> {
     await this.run(() => this.api.saveFaceSettings(this.event.id, this.faces.getRawValue()),
-      'Saved. Guests get the new thresholds when they tap “Check for new photos”.');
+      'Saved. Click “Apply to all guests” to update everyone now (new uploads use them automatically).');
+  }
+
+  // ---------- threshold preview ----------
+  protected readonly preview = signal<ThresholdPreview | null>(null);
+  protected readonly previewing = signal(false);
+  /** Current (unsaved) slider/field values, as signals so the preview updates while typing. */
+  private readonly faceValues = toSignal(this.faces.valueChanges, { initialValue: this.faces.getRawValue() });
+  protected readonly matchT = computed(() => Number(this.faceValues().matchThreshold ?? 0.42));
+  protected readonly probableT = computed(() => Number(this.faceValues().probableThreshold ?? 0.34));
+
+  /** (guest, photo) pairs with best similarity ≥ t (Confirmed/Rejected excluded — thresholds don't move them). */
+  protected countAt(t: number): number {
+    const from = Math.round(t * 100);
+    return (this.preview()?.buckets ?? []).filter((b) => Math.round(b.score * 100) >= from).reduce((s, b) => s + b.count, 0);
+  }
+
+  /** One bar per 0.01 bucket from MinScore to 1.00, height relative to the tallest. */
+  protected readonly bars = computed(() => {
+    const p = this.preview();
+    if (!p) return [];
+    const byScore = new Map(p.buckets.map((b) => [Math.round(b.score * 100), b.count]));
+    const max = Math.max(1, ...p.buckets.map((b) => b.count));
+    const bars = [];
+    for (let s = Math.round(p.minScore * 100); s <= 100; s++) {
+      const count = byScore.get(s) ?? 0;
+      const score = s / 100;
+      const zone = score >= this.matchT() - 1e-6 ? 'match' : score >= this.probableT() - 1e-6 ? 'maybe' : 'below';
+      bars.push({ score, count, zone, height: count ? Math.max(4, (count / max) * 100) : 0 });
+    }
+    return bars;
+  });
+
+  /** Position (0–100 %) of a threshold marker on the histogram's x-axis. */
+  protected markerLeft(t: number): number {
+    const min = this.preview()?.minScore ?? 0.2;
+    const steps = Math.round((1 - min) * 100) + 1;
+    // Values below the chart floor (0.20) are pinned to the left edge.
+    return Math.max(0, ((Math.round(t * 100) - Math.round(min * 100)) / steps) * 100);
+  }
+
+  protected async loadPreview(): Promise<void> {
+    this.previewing.set(true);
+    try {
+      this.preview.set(await this.api.thresholdPreview(this.event.id));
+    } catch (err) {
+      this.notify.error(err);
+    } finally {
+      this.previewing.set(false);
+    }
+  }
+
+  protected async rematchAll(): Promise<void> {
+    await this.run(() => this.api.rematchAll(this.event.id), 'Re-matching every guest in the background (usually under a minute).', false);
   }
 
   protected async drop(e: CdkDragDrop<Collection[]>): Promise<void> {

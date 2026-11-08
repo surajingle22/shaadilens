@@ -128,7 +128,7 @@ public sealed class GuestFlowTests(PostgresFixture pg) : IAsyncLifetime
         mine!.Items.Should().BeEmpty("solo is Rejected, group (0.50) is now below 0.55");
         var probable = await asha.GetFromJsonAsync<List<GuestPhotoDto>>("/api/v1/public/me/probable", Json.Options);
         probable!.Select(p => p.Id).Should().BeEquivalentTo([_p2Group, _p3Blurry]);
-        probable.Select(p => p.Id).Should().NotContain(_p1Solo, "Rejected is never shown again, even though it's a 1.0 match");
+        probable!.Select(p => p.Id).Should().NotContain(_p1Solo, "Rejected is never shown again, even though it's a 1.0 match");
 
         (await _admin.PutAsJsonAsync($"/api/v1/events/{_event.Id}/face-settings", _event.FaceSettings)).EnsureSuccessStatusCode();
     }

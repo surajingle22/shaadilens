@@ -319,8 +319,15 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("vector(512)");
 
+                    b.Property<Guid?>("FaceId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("GuestId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ImageKey")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
 
                     b.Property<int>("Source")
                         .HasColumnType("integer");

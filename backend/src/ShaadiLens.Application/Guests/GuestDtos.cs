@@ -16,7 +16,8 @@ public sealed record RegisterRequest(string? Name, string? Phone, string? Email,
 
 public sealed record GuestSessionDto(
     EventBrandingDto Event, ShareLinkType LinkType, string? GuestName, bool HasSelfie,
-    bool AllowSingleDownload, bool AllowBulkDownload, int MatchCount, int ProbableCount, DateTimeOffset? LastSearchedAt);
+    bool AllowSingleDownload, bool AllowBulkDownload, int MatchCount, int ProbableCount, DateTimeOffset? LastSearchedAt,
+    int SelfieCount, int MaxSelfies);
 
 public sealed record GuestPhotoDto(Guid Id, Guid CollectionId, int Width, int Height, DateTimeOffset? TakenAt, string ThumbUrl, string WebUrl);
 

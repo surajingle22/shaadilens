@@ -9,6 +9,9 @@
     @if (session().allowBulkDownload && total() > 0) {
       <button mat-menu-item (click)="downloadAll()"><mat-icon>folder_zip</mat-icon> Download all{{ collectionId() ? ' in this tab' : '' }}</button>
     }
+    @if (canAddSelfie()) {
+      <button mat-menu-item (click)="selfieError.set(null); addingSelfie.set(true)"><mat-icon>add_a_photo</mat-icon> Add another selfie</button>
+    }
     @if (session().hasSelfie) {
       <button mat-menu-item (click)="deleteMyData()"><mat-icon>delete</mat-icon> Delete my selfie &amp; data</button>
     } @else {
@@ -22,13 +25,16 @@
     @if (totalAll() > 0) {
       We found <strong>{{ totalAll() }}</strong> photo{{ totalAll() === 1 ? '' : 's' }} of you.
     } @else if (!collections.isLoading()) {
-      No photos of you yet. More photos are added during the event — check again later!
+      No photos of you yet. New photos of you appear here by themselves as they’re uploaded.
     }
   </p>
   <div class="row-actions">
     <button mat-stroked-button (click)="refresh()" [disabled]="refreshing()">
-      <mat-icon>{{ refreshing() ? 'hourglass_top' : 'refresh' }}</mat-icon> Check for new photos
+      <mat-icon>{{ refreshing() ? 'hourglass_top' : 'person_search' }}</mat-icon> Find more photos of me
     </button>
+    @if (canAddSelfie() && totalAll() < 5 && !collections.isLoading()) {
+      <button mat-stroked-button (click)="selfieError.set(null); addingSelfie.set(true)"><mat-icon>add_a_photo</mat-icon> Add another selfie</button>
+    }
     @if (session().allowBulkDownload && total() > 0) {
       <button mat-flat-button (click)="downloadAll()"><mat-icon>download</mat-icon> Download all</button>
     }
@@ -49,10 +55,10 @@
 @if (!isFull() && (probable.value() ?? []).length && collectionId() === null) {
   <section class="maybe">
     <h2>Might be you?</h2>
-    <p class="hint">We’re not sure about these. Tap to have a look.</p>
+    <p class="hint">We’re not sure about these. Tap one and tell us if it’s you — that also helps us find more.</p>
     <div class="strip">
       @for (p of probable.value(); track p.id; let i = $index) {
-        <button class="thumb" (click)="open(probable.value()!, i)"><img [src]="p.thumbUrl" alt="Maybe you" loading="lazy" /></button>
+        <button class="thumb" (click)="open(probable.value()!, i, 'maybe')"><img [src]="p.thumbUrl" alt="Maybe you" loading="lazy" /></button>
       }
     </div>
   </section>
@@ -62,7 +68,7 @@
 
 <div class="grid">
   @for (p of photos(); track p.id; let i = $index) {
-    <button class="cell" (click)="open(photos(), i)" [attr.aria-label]="'Photo ' + (i + 1)">
+    <button class="cell" (click)="open(photos(), i, 'mine')" [attr.aria-label]="'Photo ' + (i + 1)">
       <img [src]="p.thumbUrl" alt="" loading="lazy" />
     </button>
   }
@@ -77,6 +83,15 @@
 </footer>
 
 @if (lightbox(); as lb) {
-  <app-lightbox [photos]="lb.list" [startIndex]="lb.index" [canDownload]="session().allowSingleDownload"
-                (closed)="lightbox.set(null)" (download)="download($event)" (nearEnd)="lb.list === photos() && loadMore()" />
+  <app-lightbox [photos]="lb.list" [startIndex]="lb.index" [canDownload]="session().allowSingleDownload" [feedback]="lb.kind"
+                (closed)="lightbox.set(null)" (download)="download($event)" (nearEnd)="lb.list === photos() && loadMore()"
+                (confirm)="confirm($event)" (reject)="reject($event)" />
+}
+
+@if (addingSelfie()) {
+  <div class="overlay" role="dialog" aria-modal="true" aria-label="Add another selfie">
+    <p class="overlay-hint">A different angle helps — turn a little, or take it with/without glasses.</p>
+    <app-selfie-step [error]="selfieError()" (captured)="uploadSelfie($event)" (back)="addingSelfie.set(false)" />
+    @if (busy()) { <div class="overlay-busy"><mat-progress-bar mode="indeterminate" /><p>Looking for more photos of you…</p></div> }
+  </div>
 }

@@ -32,6 +32,8 @@ export interface GuestSessionInfo {
   matchCount: number;
   probableCount: number;
   lastSearchedAt: string | null;
+  selfieCount: number;
+  maxSelfies: number;
 }
 
 export interface GuestPhoto {
@@ -91,7 +93,19 @@ export class GuestApi {
   me = () => firstValueFrom(this.http.get<GuestSessionInfo>(`${this.base}/me`));
   collections = () => firstValueFrom(this.http.get<GuestCollection[]>(`${this.base}/collections`));
   probable = () => firstValueFrom(this.http.get<GuestPhoto[]>(`${this.base}/me/probable`));
-  refresh = () => firstValueFrom(this.http.post<MatchSummary>(`${this.base}/me/refresh`, {}));
+  /** "Find more photos of me": search again with all my selfies + confirmed faces. */
+  findMore = () => firstValueFrom(this.http.post<MatchSummary>(`${this.base}/me/find-more`, {}));
+  /** "Yes, that's me". */
+  confirm = (photoId: string) => firstValueFrom(this.http.post<void>(`${this.base}/me/matches/${photoId}/confirm`, {}));
+  /** "Not me" — never shown again. */
+  reject = (photoId: string) => firstValueFrom(this.http.post<void>(`${this.base}/me/matches/${photoId}/reject`, {}));
+
+  /** Extra selfie (another angle); the server searches again and returns the new totals. */
+  addSelfie(selfie: Blob): Promise<MatchSummary> {
+    const body = new FormData();
+    body.append('selfie', selfie, 'selfie.jpg');
+    return firstValueFrom(this.http.post<MatchSummary>(`${this.base}/me/selfie`, body));
+  }
   deleteMe = () => firstValueFrom(this.http.delete<void>(`${this.base}/me`));
 
   /** "Your photos" (Guest links) or the whole gallery (Full links). */

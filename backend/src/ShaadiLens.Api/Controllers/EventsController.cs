@@ -53,6 +53,19 @@ public sealed class EventsController(EventService events, PhotoService photos) :
         return NoContent();
     }
 
+    /// <summary>Threshold preview: how many matches at a given threshold (and a histogram for a slider).</summary>
+    [HttpGet("{id:guid}/face-settings/preview")]
+    public Task<ThresholdPreviewDto> PreviewThreshold(Guid id, [FromQuery] float? threshold, CancellationToken ct) =>
+        events.PreviewThresholdAsync(id, threshold, ct);
+
+    /// <summary>Search again for every guest (background job) — use after changing thresholds.</summary>
+    [HttpPost("{id:guid}/rematch")]
+    public async Task<IActionResult> Rematch(Guid id, CancellationToken ct)
+    {
+        await events.RematchAllAsync(id, ct);
+        return Accepted();
+    }
+
     // ---------- collections ----------
 
     [HttpPost("{id:guid}/collections")]

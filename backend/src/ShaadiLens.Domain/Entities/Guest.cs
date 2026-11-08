@@ -37,6 +37,10 @@ public class GuestReference
     public Vector Embedding { get; set; } = null!;
     public ReferenceSource Source { get; set; }
     public float Weight { get; set; } = 1f;
+    /// <summary>For ConfirmedMatch: the face the guest confirmed (so it is added once, and removed again on "Not me").</summary>
+    public Guid? FaceId { get; set; }
+    /// <summary>For Selfie: the stored selfie image (admin Match Review shows it).</summary>
+    public string? ImageKey { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 

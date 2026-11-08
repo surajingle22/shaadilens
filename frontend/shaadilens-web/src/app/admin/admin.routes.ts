@@ -21,6 +21,7 @@ export const ADMIN_ROUTES: Routes = [
           { path: 'photos', loadComponent: () => import('./photos/photos-page').then((m) => m.PhotosPage) },
           { path: 'share', loadComponent: () => import('./share/share-page').then((m) => m.SharePage) },
           { path: 'guests', loadComponent: () => import('./guests/guests-page').then((m) => m.GuestsPage) },
+          { path: 'guests/:guestId', loadComponent: () => import('./guests/match-review').then((m) => m.MatchReview) },
         ],
       },
       { path: 'system', loadComponent: () => import('./dashboard/dashboard').then((m) => m.Dashboard), title: 'System · ShaadiLens' },

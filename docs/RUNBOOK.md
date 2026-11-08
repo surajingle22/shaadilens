@@ -76,6 +76,9 @@ docker run --rm -v shaadilens_photos:/data -v ${PWD}\backup:/backup alpine tar x
 docker compose up -d
 ```
 
-## Tuning thresholds *(Phase 2: live preview)*
-Phase 1: Overview tab → Face matching. Raise **Match** if strangers show up in "Your photos"; lower **Probable**
-if people miss photos. Guests get the new result when they tap "Check for new photos" (admin: Guests → search icon).
+## Tuning thresholds
+Overview tab → Face matching → **Preview thresholds** shows how many matches each value gives (histogram of all
+guest × photo similarities; real matches pile up on the right). Raise **Match** if strangers show up in
+"Your photos"; lower **Probable** if people miss photos. **Save**, then **Apply to all guests** (background job,
+usually < 1 min). New uploads always use the saved values. Per guest: Guests → ✔ icon = Match Review
+(approve/reject faces; approving adds the face as a reference for "Find more").

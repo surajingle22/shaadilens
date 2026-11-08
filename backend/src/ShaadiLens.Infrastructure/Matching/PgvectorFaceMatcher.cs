@@ -10,7 +10,11 @@ using ShaadiLens.Infrastructure.Persistence;
 namespace ShaadiLens.Infrastructure.Matching;
 
 /// <summary>
-/// Selfie search ("forward search") with pgvector.
+/// Face matching with pgvector, in both directions:
+///   forward (SearchForGuestAsync) — one guest × all faces: selfie search, "find more", threshold changes
+///   reverse (MatchPhotoAsync)     — one new photo × all guests: photos uploaded later reach guests by themselves
+///
+/// Forward search, step by step:
 ///
 /// For each of the guest's reference embeddings (selfie, extra selfies, confirmed faces):
 ///     SELECT id, photo_id, embedding &lt;=&gt; @ref AS distance FROM faces
@@ -98,5 +102,143 @@ public sealed class PgvectorFaceMatcher(AppDbContext db, TimeProvider time, ILog
         log.LogInformation("Face search for guest {GuestId}: {References} reference(s) × {Faces} faces → {Auto} auto, {Probable} probable in {Ms} ms",
             guestId, guest.References.Count, facesCompared, auto, probable, sw.ElapsedMilliseconds);
         return new MatchSummary(auto, probable, facesCompared, sw.Elapsed.TotalMilliseconds);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Reverse search: one new photo × every guest
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Runs after face detection of every photo:
+    ///     for each face in the photo:
+    ///         SELECT guest_id, embedding &lt;=&gt; @face FROM guest_references (of this event) WHERE distance ≤ 1 − Probable
+    /// keep the best similarity per guest, then write one GuestMatch per (guest, photo) — same rules as the
+    /// forward search. Cost: (#faces in photo) small queries over (#guest references), i.e. a few ms.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> MatchPhotoAsync(Guid photoId, IReadOnlyDictionary<Guid, MatchStatus>? decisions = null, CancellationToken ct = default)
+    {
+        var photo = await db.Photos.FirstOrDefaultAsync(p => p.Id == photoId, ct);
+        if (photo is null) return [];
+        var ev = await db.Events.AsNoTracking().Where(e => e.Id == photo.EventId)
+            .Select(e => new { e.FaceSettings, e.FaceSearchEnabled }).FirstAsync(ct);
+        var settings = ev.FaceSettings;
+        var maxDistance = 1.0 - settings.ProbableThreshold;
+
+        // guestId → best face of this photo for that guest
+        var bestPerGuest = new Dictionary<Guid, (Guid FaceId, float Similarity)>();
+        if (ev.FaceSearchEnabled)
+        {
+            var faces = await db.Faces.AsNoTracking().Where(f => f.PhotoId == photoId)
+                .Select(f => new { f.Id, f.Embedding }).ToListAsync(ct);
+            foreach (var face in faces)
+            {
+                var hits = await db.GuestReferences.AsNoTracking()
+                    .Where(r => db.Guests.Any(g => g.Id == r.GuestId && g.EventId == photo.EventId)
+                                && r.Embedding.CosineDistance(face.Embedding) <= maxDistance)
+                    .Select(r => new { r.GuestId, Distance = r.Embedding.CosineDistance(face.Embedding) })
+                    .ToListAsync(ct);
+                foreach (var hit in hits)
+                {
+                    var similarity = (float)(1.0 - hit.Distance);
+                    if (!bestPerGuest.TryGetValue(hit.GuestId, out var current) || similarity > current.Similarity)
+                        bestPerGuest[hit.GuestId] = (face.Id, similarity);
+                }
+            }
+        }
+
+        var existing = await db.GuestMatches.Where(m => m.PhotoId == photoId).ToDictionaryAsync(m => m.GuestId, ct);
+        var now = time.GetUtcNow();
+        var newlyVisible = new List<Guid>();
+
+        foreach (var (guestId, best) in bestPerGuest)
+        {
+            var status = MatchStatus.Probable;
+            var restored = decisions is not null && decisions.TryGetValue(guestId, out status);
+            if (!restored) status = best.Similarity >= settings.MatchThreshold ? MatchStatus.Auto : MatchStatus.Probable;
+
+            if (existing.Remove(guestId, out var match))
+            {
+                if (match.Status is MatchStatus.Confirmed or MatchStatus.Rejected) continue; // guest's decision wins
+                if (status == MatchStatus.Auto && match.Status != MatchStatus.Auto) newlyVisible.Add(guestId);
+                match.FaceId = best.FaceId;
+                match.Score = best.Similarity;
+                match.Status = status;
+            }
+            else
+            {
+                db.GuestMatches.Add(new GuestMatch
+                {
+                    GuestId = guestId, PhotoId = photoId, FaceId = best.FaceId,
+                    Score = best.Similarity, Status = status, CreatedAt = now,
+                });
+                if (status == MatchStatus.Auto && !restored) newlyVisible.Add(guestId);
+            }
+        }
+        db.GuestMatches.RemoveRange(existing.Values.Where(m => m.Status is MatchStatus.Auto or MatchStatus.Probable));
+
+        if (photo.Status == PhotoStatus.FacesDetected) photo.Status = PhotoStatus.Matched;
+        await db.SaveChangesAsync(ct);
+
+        if (bestPerGuest.Count > 0)
+            log.LogInformation("Reverse match photo {PhotoId}: {Guests} guest(s) matched, {New} with a new photo",
+                photoId, bestPerGuest.Count, newlyVisible.Count);
+        return newlyVisible;
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Threshold preview
+    // ---------------------------------------------------------------------------------------------
+
+    /// <summary>Lowest similarity we look at for the preview (anything below is never a useful threshold).</summary>
+    public const int HistogramMinBucket = 20;
+
+    /// <summary>
+    /// For every (guest, photo) pair: the best similarity over the guest's references and the photo's faces,
+    /// counted in 0.01-wide buckets. With that the UI can answer "how many matches at 0.40? at 0.45?" for any
+    /// slider position without asking the server again.
+    ///
+    /// This compares ALL references with ALL faces of the event (500 guests × 2 refs × 15k faces ≈ 15M
+    /// distances), so it takes a few seconds — it's a button in the admin, not something run per request.
+    /// </summary>
+    public async Task<ThresholdHistogram> HistogramAsync(Guid eventId, CancellationToken ct = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var maxDistance = 1.0 - HistogramMinBucket / 100.0;
+        db.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
+
+        var rows = await db.Database.SqlQuery<BucketRow>($"""
+            SELECT LEAST(floor(x.sim * 100), 100)::int AS "Bucket", count(*)::int AS "Count"
+            FROM (
+                SELECT r."GuestId", f."PhotoId", max(1 - (f."Embedding" <=> r."Embedding")) AS sim
+                FROM "GuestReferences" r
+                JOIN "Guests" g ON g."Id" = r."GuestId"
+                JOIN "Faces" f ON f."EventId" = g."EventId"
+                WHERE g."EventId" = {eventId} AND (f."Embedding" <=> r."Embedding") <= {maxDistance}
+                GROUP BY r."GuestId", f."PhotoId"
+            ) x
+            JOIN "Photos" p ON p."Id" = x."PhotoId" AND NOT p."IsHidden"
+            WHERE NOT EXISTS (
+                SELECT 1 FROM "GuestMatches" m
+                WHERE m."GuestId" = x."GuestId" AND m."PhotoId" = x."PhotoId" AND m."Status" IN (2, 3))
+            GROUP BY 1
+            """).ToListAsync(ct);
+
+        var decided = await db.GuestMatches.AsNoTracking()
+            .Where(m => db.Guests.Any(g => g.Id == m.GuestId && g.EventId == eventId)
+                        && (m.Status == MatchStatus.Confirmed || m.Status == MatchStatus.Rejected))
+            .GroupBy(m => m.Status).Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+        var guests = await db.Guests.CountAsync(g => g.EventId == eventId && g.References.Any(), ct);
+
+        log.LogInformation("Threshold histogram for event {EventId}: {Guests} guests in {Ms} ms", eventId, guests, sw.ElapsedMilliseconds);
+        return new ThresholdHistogram(HistogramMinBucket, rows.ToDictionary(r => r.Bucket, r => r.Count),
+            decided.GetValueOrDefault(MatchStatus.Confirmed), decided.GetValueOrDefault(MatchStatus.Rejected),
+            guests, sw.Elapsed.TotalMilliseconds);
+    }
+
+    private sealed class BucketRow
+    {
+        public int Bucket { get; set; }
+        public int Count { get; set; }
     }
 }

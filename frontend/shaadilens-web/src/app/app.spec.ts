@@ -18,7 +18,7 @@ describe('App routes', () => {
 
   it('sends a signed-out visitor from / to the admin login', async () => {
     const harnessPromise = RouterTestingHarness.create('/');
-    await vi.waitFor(() => http.expectOne(API.me).flush(null, { status: 401, statusText: 'Unauthorized' }));
+    await vi.waitFor(() => http.expectOne(API.me).flush(null, { status: 401, statusText: 'Unauthorized' }), { timeout: 5000 }); // first lazy route load can be slow on a cold CI box
     const harness = await harnessPromise;
     expect(harness.routeNativeElement?.textContent).toContain('ShaadiLens admin');
   });

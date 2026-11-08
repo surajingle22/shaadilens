@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { RouterLink } from '@angular/router';
 import { AdminApi } from '../../core/api/admin-api';
 import { GuestAdmin } from '../../core/api/api.models';
 import { Notify } from '../../core/notify';
@@ -12,7 +13,7 @@ import { EventContext } from '../event/event-context';
 
 @Component({
   selector: 'app-guests-page',
-  imports: [DatePipe, MatButtonModule, MatIconModule, MatProgressBarModule, MatTableModule, MatTooltipModule],
+  imports: [DatePipe, MatButtonModule, MatIconModule, MatProgressBarModule, MatTableModule, MatTooltipModule, RouterLink],
   template: `
     @if (guests.isLoading() && !guests.hasValue()) { <mat-progress-bar mode="indeterminate" /> }
 
@@ -31,7 +32,10 @@ import { EventContext } from '../event/event-context';
           <ng-container matColumnDef="matches">
             <th mat-header-cell *matHeaderCellDef>Photos</th>
             <td mat-cell *matCellDef="let g">
-              @if (g.hasSelfie) { {{ g.matchCount }} <span class="muted">+ {{ g.probableCount }} maybe</span> } @else { <span class="muted">no selfie</span> }
+              @if (g.hasSelfie) {
+                {{ g.matchCount }} <span class="muted">+ {{ g.probableCount }} maybe</span>
+                @if (g.rejectedCount) { <span class="muted"> · {{ g.rejectedCount }} not me</span> }
+              } @else { <span class="muted">no selfie</span> }
             </td>
           </ng-container>
           <ng-container matColumnDef="created">
@@ -42,6 +46,7 @@ import { EventContext } from '../event/event-context';
             <th mat-header-cell *matHeaderCellDef></th>
             <td mat-cell *matCellDef="let g" class="actions">
               @if (g.hasSelfie) {
+                <a mat-icon-button [routerLink]="[g.id]" matTooltip="Review matches"><mat-icon>fact_check</mat-icon></a>
                 <button mat-icon-button (click)="research(g)" matTooltip="Search again (after new uploads)"><mat-icon>person_search</mat-icon></button>
               }
               <button mat-icon-button (click)="remove(g)" matTooltip="Delete guest and selfie"><mat-icon>delete</mat-icon></button>

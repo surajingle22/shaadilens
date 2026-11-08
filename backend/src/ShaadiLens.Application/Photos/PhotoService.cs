@@ -28,7 +28,10 @@ public sealed class PhotoService(IAppDbContext db, IStorageService storage, IPho
 
         var query = db.Photos.AsNoTracking().Where(p => p.EventId == eventId);
         if (q.CollectionId is { } cid) query = query.Where(p => p.CollectionId == cid);
-        if (q.Status is { } st) query = query.Where(p => p.Status == st);
+        // "Done" = faces detected (and matched against guests, the last step).
+        if (q.Status is PhotoStatus.FacesDetected or PhotoStatus.Matched)
+            query = query.Where(p => p.Status == PhotoStatus.FacesDetected || p.Status == PhotoStatus.Matched);
+        else if (q.Status is { } st) query = query.Where(p => p.Status == st);
 
         var total = await query.CountAsync(ct);
         // Photos sorted by when they were taken (EXIF), falling back to upload time.

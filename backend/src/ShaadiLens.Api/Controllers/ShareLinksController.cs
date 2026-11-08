@@ -60,6 +60,26 @@ public sealed class ShareLinksController(ShareLinkService links, GuestAdminServi
     [HttpPost("guests/{guestId:guid}/search")]
     public Task<MatchSummary> Research(Guid guestId, CancellationToken ct) => guestAdmin.ResearchAsync(guestId, ct);
 
+    /// <summary>Match Review: the guest's selfies and every matched face with its score.</summary>
+    [HttpGet("guests/{guestId:guid}/matches")]
+    public Task<GuestReviewDto> Matches(Guid guestId, CancellationToken ct) => guestAdmin.ReviewAsync(guestId, ct);
+
+    /// <summary>Approve (Confirmed) or reject a match.</summary>
+    [HttpPatch("matches/{matchId:guid}")]
+    public async Task<IActionResult> SetMatch(Guid matchId, SetMatchStatusRequest req, CancellationToken ct)
+    {
+        await guestAdmin.SetMatchStatusAsync(matchId, req.Status, ct);
+        return NoContent();
+    }
+
+    /// <summary>A guest's selfie (admin cookie auth, so it works in an &lt;img&gt;). Never cached.</summary>
+    [HttpGet("guest-references/{referenceId:guid}/image")]
+    public async Task<IActionResult> SelfieImage(Guid referenceId, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return File(await guestAdmin.OpenSelfieAsync(referenceId, ct), "image/jpeg");
+    }
+
     [HttpDelete("guests/{guestId:guid}")]
     public async Task<IActionResult> DeleteGuest(Guid guestId, CancellationToken ct)
     {

@@ -68,7 +68,7 @@ public sealed class UploadPipelineTests(PostgresFixture pg) : IDisposable
         // ---- job 2: detect faces ----
         await RunJobAsync(j => j.DetectFacesAsync(photoId, null, CancellationToken.None));
         photo = await GetPhotoAsync(client, photoId);
-        photo.Photo.Status.Should().Be(PhotoStatus.FacesDetected);
+        photo.Photo.Status.Should().Be(PhotoStatus.Matched, "faces detected, then compared with every guest (none yet)");
         photo.Photo.FaceCount.Should().Be(1, "tiny and low-confidence faces are filtered out");
         var face = photo.Faces.Single();
         face.X.Should().BeApproximately(100f / 2048, 1e-4f, "boxes are stored normalised to 0..1");

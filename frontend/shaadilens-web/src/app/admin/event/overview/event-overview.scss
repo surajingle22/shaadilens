@@ -15,7 +15,7 @@ form.panel, section.panel { display: flex; flex-direction: column; }
 .color input { width: 44px; height: 36px; border: none; background: none; padding: 0; }
 .cover { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
 .cover img { width: 96px; height: 64px; object-fit: cover; border-radius: 8px; }
-.actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .collections { list-style: none; padding: 0; margin: 0 0 8px; }
 .collections li {
   display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 8px;
@@ -30,3 +30,20 @@ form.panel, section.panel { display: flex; flex-direction: column; }
 .grow { flex: 1; }
 .error { color: var(--mat-sys-error); }
 .danger h2 { color: var(--mat-sys-error); }
+
+/* ---------- threshold preview histogram ---------- */
+.preview { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin-top: 4px; }
+.preview > p { margin: 0; }
+.hist { position: relative; width: 100%; height: 90px; display: flex; align-items: flex-end; gap: 1px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant); }
+.bar { flex: 1; min-width: 0; border-radius: 2px 2px 0 0; }
+.bar.match { background: var(--mat-sys-primary); }
+.bar.maybe { background: var(--mat-sys-tertiary); }
+.bar.below { background: var(--mat-sys-outline-variant); }
+.marker { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--mat-sys-on-surface); }
+.axis { width: 100%; display: flex; justify-content: space-between; margin-top: -4px; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.legend .match { background: var(--mat-sys-primary); }
+.legend .maybe { background: var(--mat-sys-tertiary); }
+.legend .below { background: var(--mat-sys-outline-variant); }

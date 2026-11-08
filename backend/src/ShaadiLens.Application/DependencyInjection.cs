@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<PhotoService>();
         services.AddScoped<ShareLinkService>();
         services.AddScoped<GuestAccessService>();
+        services.AddScoped<MatchFeedbackService>();
         services.AddScoped<GuestAdminService>();
         return services;
     }

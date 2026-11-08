@@ -7,7 +7,8 @@ using ShaadiLens.Domain.Enums;
 namespace ShaadiLens.Application.Events;
 
 /// <summary>Admin use cases for events and their collections.</summary>
-public sealed class EventService(IAppDbContext db, IStorageService storage, IMediaUrlSigner urls)
+public sealed class EventService(
+    IAppDbContext db, IStorageService storage, IMediaUrlSigner urls, IFaceMatcher matcher, IPhotoPipelineScheduler scheduler)
 {
     public static readonly string[] DefaultCollections = ["Haldi", "Mehendi", "Sangeet", "Wedding", "Reception"];
 
@@ -81,6 +82,27 @@ public sealed class EventService(IAppDbContext db, IStorageService storage, IMed
             MaxSelfieYaw = s.MaxSelfieYaw,
         };
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// "At 0.40: 312 matches, at 0.45: 251". Returns the score histogram of all (guest, photo) pairs so the
+    /// admin UI can show the count for any slider position, plus the count at <paramref name="threshold"/>
+    /// (default: the current Match threshold). Confirmed/Rejected pairs don't depend on thresholds.
+    /// </summary>
+    public async Task<ThresholdPreviewDto> PreviewThresholdAsync(Guid id, float? threshold, CancellationToken ct)
+    {
+        var ev = await FindAsync(id, ct);
+        var t = threshold ?? ev.FaceSettings.MatchThreshold;
+        var h = await matcher.HistogramAsync(id, ct);
+        var buckets = h.Buckets.OrderBy(b => b.Key).Select(b => new ScoreBucketDto(b.Key / 100f, b.Value)).ToList();
+        return new ThresholdPreviewDto(t, h.AtOrAbove(t), h.Confirmed, h.Rejected, h.Guests, h.MinBucket / 100f, buckets, h.ElapsedMs);
+    }
+
+    /// <summary>Apply (new) thresholds to every guest now, in the background.</summary>
+    public async Task RematchAllAsync(Guid id, CancellationToken ct)
+    {
+        _ = await FindAsync(id, ct);
+        scheduler.EnqueueRematchEvent(id);
     }
 
     /// <summary>Deletes the event, all rows (cascade) and all files on disk.</summary>

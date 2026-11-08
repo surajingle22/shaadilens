@@ -36,10 +36,38 @@ public sealed class GuestMeController(GuestAccessService guests, TokenService to
     [HttpGet("me/probable")]
     public Task<IReadOnlyList<GuestPhotoDto>> Probable(CancellationToken ct) => guests.GetProbableAsync(Ctx, ct);
 
-    /// <summary>"Check for new photos" — search all faces again.</summary>
+    /// <summary>"Find more photos of me" — search all faces again with all my references.</summary>
+    [HttpPost("me/find-more")]
     [HttpPost("me/refresh")]
     [EnableRateLimiting(AuthSetup.RefreshRateLimit)]
     public Task<MatchSummary> Refresh(CancellationToken ct) => guests.RefreshAsync(Ctx, ct);
+
+    /// <summary>"Yes, that's me".</summary>
+    [HttpPost("me/matches/{photoId:guid}/confirm")]
+    public async Task<IActionResult> Confirm(Guid photoId, CancellationToken ct)
+    {
+        await guests.ConfirmAsync(Ctx, photoId, ct);
+        return NoContent();
+    }
+
+    /// <summary>"Not me".</summary>
+    [HttpPost("me/matches/{photoId:guid}/reject")]
+    public async Task<IActionResult> Reject(Guid photoId, CancellationToken ct)
+    {
+        await guests.RejectAsync(Ctx, photoId, ct);
+        return NoContent();
+    }
+
+    /// <summary>Extra selfie (multipart field "selfie"), then search again.</summary>
+    [HttpPost("me/selfie")]
+    [EnableRateLimiting(AuthSetup.RegisterRateLimit)]
+    [RequestSizeLimit(25 * 1024 * 1024)]
+    public async Task<MatchSummary> AddSelfie(IFormFile? selfie, CancellationToken ct)
+    {
+        if (selfie is null || selfie.Length == 0) throw new BadRequestException("Please take a selfie first.");
+        await using var stream = selfie.OpenReadStream();
+        return await guests.AddSelfieAsync(Ctx, stream, ct);
+    }
 
     /// <summary>Whole gallery (Full links only).</summary>
     [HttpGet("gallery")]

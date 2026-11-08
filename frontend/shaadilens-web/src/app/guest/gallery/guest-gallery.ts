@@ -5,7 +5,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { GuestApi, GuestPhoto, GuestSessionInfo } from '../../core/api/guest-api';
-import { Notify } from '../../core/notify';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Notify, errorMessage } from '../../core/notify';
+import { SelfieStep } from '../steps/selfie-step';
 import { Lightbox } from './lightbox';
 
 const PAGE_SIZE = 60;
@@ -17,7 +19,7 @@ const PAGE_SIZE = 60;
  */
 @Component({
   selector: 'app-guest-gallery',
-  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox],
+  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox, SelfieStep],
   templateUrl: './guest-gallery.html',
   styleUrl: './guest-gallery.scss',
 })
@@ -42,7 +44,13 @@ export class GuestGallery {
   protected readonly total = signal(0);
   protected readonly loading = signal(false);
   protected readonly refreshing = signal(false);
-  protected readonly lightbox = signal<{ list: GuestPhoto[]; index: number } | null>(null);
+  protected readonly lightbox = signal<{ list: GuestPhoto[]; index: number; kind: 'mine' | 'maybe' | 'none' } | null>(null);
+  protected readonly busy = signal(false);
+  /** "Add another selfie" overlay. */
+  protected readonly addingSelfie = signal(false);
+  protected readonly selfieError = signal<string | null>(null);
+  protected readonly selfieCount = signal(0);
+  protected readonly canAddSelfie = computed(() => this.session().hasSelfie && this.selfieCount() < this.session().maxSelfies);
   private page = 0;
   private generation = 0;
   private readonly sentinel = viewChild<ElementRef<HTMLElement>>('sentinel');
@@ -54,6 +62,7 @@ export class GuestGallery {
   });
 
   constructor() {
+    effect(() => this.selfieCount.set(this.session().selfieCount));
     effect(() => {
       this.collectionId();
       untracked(() => void this.reset());
@@ -95,25 +104,85 @@ export class GuestGallery {
     }
   }
 
-  protected open(list: GuestPhoto[], index: number): void {
-    this.lightbox.set({ list, index });
+  protected open(list: GuestPhoto[], index: number, kind: 'mine' | 'maybe'): void {
+    this.lightbox.set({ list, index, kind: this.isFull() ? 'none' : kind });
   }
 
-  /** "Check for new photos": search all faces again (photos uploaded after you registered). */
+  /** "Yes, that's me": moves the photo to "Your photos"; its face also helps "Find more". */
+  protected async confirm(photo: GuestPhoto): Promise<void> {
+    await this.decide(photo, true);
+  }
+
+  /** "Not me": the photo disappears for good. */
+  protected async reject(photo: GuestPhoto): Promise<void> {
+    await this.decide(photo, false);
+  }
+
+  private async decide(photo: GuestPhoto, isMe: boolean): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set(true);
+    try {
+      await (isMe ? this.api.confirm(photo.id) : this.api.reject(photo.id));
+      this.lightbox.set(null);
+      if (!isMe) {
+        this.photos.update((list) => list.filter((p) => p.id !== photo.id));
+        if (this.photos().length < this.total()) this.total.update((t) => t - 1);
+      }
+      this.probable.reload();
+      this.collections.reload();
+      if (isMe) await this.reset();
+      this.notify.ok(isMe
+        ? 'Added to your photos. Tap “Find more photos of me” — we’ll use this photo to look for more.'
+        : 'Removed. We won’t show it to you again.');
+    } catch (err) {
+      this.handle(err);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /**
+   * "Find more photos of me": search again with all the guest's selfies and confirmed faces.
+   * (New uploads already arrive by themselves; this helps after "That's me" or another selfie.)
+   */
   protected async refresh(): Promise<void> {
     this.refreshing.set(true);
     const before = this.total();
     try {
-      await this.api.refresh();
+      await this.api.findMore();
       this.collections.reload();
       this.probable.reload();
       await this.reset();
       const found = this.total() - before;
-      this.notify.ok(found > 0 ? `Found ${found} new photo${found > 1 ? 's' : ''} of you!` : 'No new photos yet — check again later.');
+      this.notify.ok(found > 0
+        ? `Found  more photo of you!`
+        : 'Nothing new yet. Tip: say “That’s me” on photos under “Might be you?”, or add another selfie.');
     } catch (err) {
       this.handle(err);
     } finally {
       this.refreshing.set(false);
+    }
+  }
+
+  /** Extra selfie from the overlay. 422 = not usable: show the reason and let them retake. */
+  protected async uploadSelfie(blob: Blob): Promise<void> {
+    this.busy.set(true);
+    this.selfieError.set(null);
+    const before = this.total();
+    try {
+      await this.api.addSelfie(blob);
+      this.selfieCount.update((n) => n + 1);
+      this.addingSelfie.set(false);
+      this.collections.reload();
+      this.probable.reload();
+      await this.reset();
+      const found = this.total() - before;
+      this.notify.ok(found > 0 ? `Thanks! That found  more photo of you.` : 'Thanks! We’ll use it for new photos too.');
+    } catch (err) {
+      if (err instanceof HttpErrorResponse && (err.status === 422 || err.status === 400)) this.selfieError.set(errorMessage(err));
+      else this.handle(err);
+    } finally {
+      this.busy.set(false);
     }
   }
 

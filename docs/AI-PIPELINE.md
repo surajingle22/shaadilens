@@ -123,7 +123,7 @@ WHERE  event_id = @event AND embedding <=> @ref <= 1 - ProbableThreshold   -- i.
 4. The guest's own decisions win: **Confirmed** / **Rejected** rows are never touched by a re-search.
 5. Auto/Probable rows that no longer qualify (e.g. admin raised the threshold) are removed.
 
-Runs right after registration (~0.4 s) and again when the guest taps **Check for new photos**.
+Runs right after registration (~0.4 s), after "That's me" / extra selfies when the guest taps **Find more photos of me**, and for everyone when the admin clicks **Apply to all guests**.
 
 **Exact scan, not the HNSW index.** HNSW is *approximate*: combined with a `WHERE event_id = …` filter it can
 silently return fewer neighbours than exist. Comparing a selfie with every face of one wedding (≤ ~100k
@@ -133,11 +133,62 @@ here. The HNSW indexes are kept for "nearest N" queries (`ORDER BY … LIMIT`) s
 **Real result** (sample group photo, 6 people, uploaded twice; selfie = one guest cropped & enlarged):
 2 Auto matches (both copies), 0 false positives — the closest *other* person scored 0.196.
 
+
+## 4b. Reverse search — photos uploaded later (`MatchPhotoAsync`)
+
+Selfie search answers "which existing photos is this guest in?". During a wedding, photos keep arriving
+*after* guests registered, so every new photo also asks the opposite question: **"which registered guests are
+in this photo?"**
+
+```sql
+-- right after face detection, for each face F of the new photo:
+SELECT guest_id, embedding <=> @F AS distance
+FROM   "GuestReferences"            -- selfies + confirmed faces of every guest of this event
+WHERE  distance <= 1 - ProbableThreshold
+```
+Same rules as the forward search (best face per guest, Auto/Probable split, decisions win). It's cheap: a
+photo has a handful of faces and an event has ~1,000 references, so it adds a few milliseconds to each
+photo. The photo then moves to status **Matched**. Result: a guest's gallery fills up by itself during the
+event — no "refresh" needed (Phase 2b adds a push notification on top).
+
+If a photo is re-processed (faces detected again), its match rows are recreated; the guests' "That's me" /
+"Not me" decisions are remembered first and restored afterwards.
+
+## 4c. Feedback — how the AI learns from "That's me" and "Not me"
+
+There is no model training here — the network stays frozen. What changes is **which vectors we search with**:
+
+| Action | Effect on the data | Effect on search |
+|---|---|---|
+| **That's me** (guest, or ✓ in admin Match Review) | match → Confirmed; the face's embedding is added as a `GuestReference (ConfirmedMatch)` | next search also looks for faces close to *this* face (query expansion) |
+| **Not me** (guest, or ✗ in admin) | match → Rejected; if it was confirmed, its reference is removed again | never shown again; a wrong face can't keep pulling in more wrong photos |
+| **Find more photos of me** | — | search again with *all* references, best similarity per face |
+| **Add another selfie** (max 3) | one more `GuestReference (Selfie)` | a different angle/glasses/no glasses |
+
+Worked example (from the tests): selfie = vector **A**. A side-profile photo scores 0.38 against A →
+"Might be you?". The guest taps **That's me**. Another photo from the same angle scores only 0.05 against
+A, but 0.93 against the confirmed side profile → after **Find more** it's in "Your photos".
+
+## 4d. Choosing thresholds with the preview
+
+*Overview → Face matching → Preview thresholds* runs one big query: for every (guest, photo) pair, the best
+similarity over all references and faces, counted in 0.01-wide buckets (0.20…1.00). The browser then shows
+"at 0.42: N in Your photos, M more in Might be you?" for any value you type, without asking the server
+again. Confirmed/Rejected pairs are counted separately — thresholds never move them.
+
+How to read the histogram: real matches pile up on the right (0.5–0.8), strangers on the left (< 0.25).
+Put **Match** in the valley between the two humps and **Probable** a little lower. After saving, click
+**Apply to all guests** to re-run every guest's search in the background (new uploads use the new values
+automatically).
+
+The query compares *all* references with *all* faces (500 guests × 2 refs × 15k faces ≈ 15 M distances),
+so it takes seconds on a laptop — it's a button, not something run on every page load.
 ## 5. Where it lives
 
 - `Face.Embedding vector(512)` and `GuestReference.Embedding vector(512)` in Postgres.
 - **Forward search** (new selfie → all faces, Phase 1) and **reverse search** (new face → all guest
-  references, Phase 2) use the same math.
+  references, 4b) use the same math.
+- Feedback rules: `Application/Guests/MatchFeedbackService.cs` (used by guest buttons and admin review).
 
 ## 6. Try it yourself
 

@@ -124,7 +124,39 @@
         <input matInput type="number" formControlName="maxSelfieYaw" /></mat-form-field>
     </div>
     <p class="muted small">Min face size / detector score apply to photos processed after saving (use Reprocess for old ones).</p>
-    <div class="actions"><button mat-stroked-button type="submit" [disabled]="faces.invalid || faces.pristine || saving()">Save thresholds</button></div>
+    <!-- Threshold preview: every guest × every face, bucketed by similarity; recomputed per keystroke in the browser. -->
+    <div class="preview">
+      <button mat-stroked-button type="button" (click)="loadPreview()" [disabled]="previewing()">
+        <mat-icon>insights</mat-icon> {{ preview() ? 'Refresh preview' : 'Preview thresholds' }}
+      </button>
+      @if (previewing()) { <mat-progress-bar mode="indeterminate" /> }
+      @if (preview(); as p) {
+        <p class="small">
+          At <strong>{{ matchT() | number: '1.2-2' }}</strong>: <strong>{{ countAt(matchT()) }}</strong> photo matches in “Your photos” ·
+          <strong>{{ countAt(probableT()) - countAt(matchT()) }}</strong> more in “Might be you?” (from {{ probableT() | number: '1.2-2' }})
+          <span class="muted"> — plus {{ p.confirmed }} confirmed / {{ p.rejected }} rejected by people, across {{ p.guests }} guest(s)</span>
+        </p>
+        <div class="hist" role="img" [attr.aria-label]="'Matches by similarity score; ' + countAt(matchT()) + ' at or above the match threshold'">
+          @for (b of bars(); track b.score) {
+            <span class="bar" [class]="b.zone" [style.height.%]="b.height"
+                  [attr.title]="(b.score | number: '1.2-2') + ': ' + b.count + ' match' + (b.count === 1 ? '' : 'es')"></span>
+          }
+          <span class="marker" [style.left.%]="markerLeft(probableT())" title="Probable threshold"></span>
+          <span class="marker" [style.left.%]="markerLeft(matchT())" title="Match threshold"></span>
+        </div>
+        <div class="axis small muted"><span>{{ p.minScore | number: '1.2-2' }}</span><span>similarity</span><span>1.00</span></div>
+        <div class="legend small">
+          <span><i class="match"></i> Your photos</span><span><i class="maybe"></i> Might be you?</span><span><i class="below"></i> Not shown</span>
+        </div>
+      }
+    </div>
+
+    <div class="actions">
+      <button mat-button type="button" (click)="rematchAll()" [disabled]="saving()" matTooltip="Search again for every guest with the saved thresholds">
+        <mat-icon>group</mat-icon> Apply to all guests
+      </button>
+      <button mat-stroked-button type="submit" [disabled]="faces.invalid || faces.pristine || saving()">Save thresholds</button>
+    </div>
   </form>
 
   <section class="panel danger">
