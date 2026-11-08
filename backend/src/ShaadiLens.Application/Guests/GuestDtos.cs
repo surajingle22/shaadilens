@@ -17,7 +17,14 @@ public sealed record RegisterRequest(string? Name, string? Phone, string? Email,
 public sealed record GuestSessionDto(
     EventBrandingDto Event, ShareLinkType LinkType, string? GuestName, bool HasSelfie,
     bool AllowSingleDownload, bool AllowBulkDownload, int MatchCount, int ProbableCount, DateTimeOffset? LastSearchedAt,
-    int SelfieCount, int MaxSelfies);
+    int SelfieCount, int MaxSelfies, NotificationStatusDto Notifications);
+
+/// <param name="PushPublicKey">VAPID key for PushManager.subscribe; null = Web Push not set up on this server.</param>
+/// <param name="EmailAvailable">SMTP is set up and the guest gave an email address.</param>
+public sealed record NotificationStatusDto(string? PushPublicKey, bool PushOn, bool EmailAvailable, bool EmailOn);
+
+/// <param name="Subscription">The browser's PushSubscription as JSON (null = no push / turn push off).</param>
+public sealed record NotificationRequest(System.Text.Json.JsonElement? Subscription, bool Email);
 
 public sealed record GuestPhotoDto(Guid Id, Guid CollectionId, int Width, int Height, DateTimeOffset? TakenAt, string ThumbUrl, string WebUrl);
 

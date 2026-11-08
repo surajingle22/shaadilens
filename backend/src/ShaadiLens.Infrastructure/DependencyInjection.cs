@@ -3,12 +3,14 @@ using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using ShaadiLens.Application.Abstractions;
 using ShaadiLens.Application.Faces;
 using ShaadiLens.Infrastructure.FaceService;
 using ShaadiLens.Infrastructure.Matching;
 using ShaadiLens.Infrastructure.Media;
+using ShaadiLens.Infrastructure.Notifications;
 using ShaadiLens.Infrastructure.Sharing;
 using ShaadiLens.Infrastructure.Persistence;
 using ShaadiLens.Infrastructure.Processing;
@@ -65,6 +67,17 @@ public static class DependencyInjection
             ConfigureFaceServiceClient(sp, http);
             http.Timeout = TimeSpan.FromSeconds(3);
         });
+
+        // ---- Notifications: Web Push + email (both optional, configured in .env) ----
+        services.Configure<SmtpOptions>(config.GetSection(SmtpOptions.Section));
+        services.Configure<PushOptions>(config.GetSection(PushOptions.Section));
+        services.AddHttpClient(nameof(WebPushSender), http => http.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
+        services.AddSingleton<IPushSender, WebPushSender>();
+        services.AddScoped<NotifyJobs>();
+        services.AddScoped<IGuestNotifier>(sp => sp.GetRequiredService<NotifyJobs>());
+        // The Api project replaces this with the SignalR implementation.
+        services.TryAddSingleton<IRealtimeNotifier, NullRealtimeNotifier>();
 
         // ---- Background jobs (Hangfire, stored in Postgres schema "hangfire") ----
         services.AddScoped<ImageProcessor>();

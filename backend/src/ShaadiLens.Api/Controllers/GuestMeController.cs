@@ -69,6 +69,16 @@ public sealed class GuestMeController(GuestAccessService guests, TokenService to
         return await guests.AddSelfieAsync(Ctx, stream, ct);
     }
 
+    /// <summary>"Notify me": push subscription and/or email opt-in. Body: { subscription: {...}|null, email: bool }.</summary>
+    [HttpPut("me/notifications")]
+    public Task<NotificationStatusDto> SetNotifications(NotificationRequest req, CancellationToken ct) =>
+        guests.SetNotificationsAsync(Ctx, req, ct);
+
+    /// <summary>Turn all notifications off.</summary>
+    [HttpDelete("me/notifications")]
+    public Task<NotificationStatusDto> NotificationsOff(CancellationToken ct) =>
+        guests.SetNotificationsAsync(Ctx, new NotificationRequest(null, false), ct);
+
     /// <summary>Whole gallery (Full links only).</summary>
     [HttpGet("gallery")]
     public Task<PagedResult<GuestPhotoDto>> Gallery([FromQuery] Guid? collectionId, [FromQuery] int page = 1, [FromQuery] int pageSize = 60, CancellationToken ct = default) =>

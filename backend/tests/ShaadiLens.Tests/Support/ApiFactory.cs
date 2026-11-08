@@ -40,6 +40,8 @@ public sealed class ApiFactory(PostgresFixture pg) : WebApplicationFactory<Progr
     public string StorageRoot { get; } = Path.Combine(Path.GetTempPath(), "shaadilens-tests", Guid.NewGuid().ToString("N"));
     public FakeFaceEngine Faces { get; } = new();
     public RecordingScheduler Scheduler { get; } = new();
+    public FakePushSender Push { get; } = new();
+    public FakeEmailSender Email { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -59,6 +61,10 @@ public sealed class ApiFactory(PostgresFixture pg) : WebApplicationFactory<Progr
             s.AddSingleton<IFaceEngine>(Faces);
             s.RemoveAll<IPhotoPipelineScheduler>();
             s.AddSingleton<IPhotoPipelineScheduler>(Scheduler);
+            s.RemoveAll<IPushSender>();
+            s.AddSingleton<IPushSender>(Push);
+            s.RemoveAll<IEmailSender>();
+            s.AddSingleton<IEmailSender>(Email);
         });
     }
 

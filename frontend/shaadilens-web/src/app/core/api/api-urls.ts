@@ -47,6 +47,11 @@ export const API = {
   selfieImage: (referenceId: string) => `${v1}/guest-references/${referenceId}/image`,
   thresholdPreview: (eventId: string) => `${v1}/events/${eventId}/face-settings/preview`,
   rematch: (eventId: string) => `${v1}/events/${eventId}/rematch`,
+  guestNotify: (id: string) => `${v1}/guests/${id}/notify`,
+
+  settings: `${v1}/settings`,
+  testEmail: `${v1}/settings/test-email`,
+  vapidKeys: `${v1}/settings/vapid-keys`,
 
   hangfire: '/hangfire',
 } as const;

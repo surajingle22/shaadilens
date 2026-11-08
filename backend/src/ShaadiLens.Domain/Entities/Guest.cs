@@ -18,6 +18,10 @@ public class Guest
     public string? PushSubscriptionJson { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastNotifiedAt { get; set; }
+    /// <summary>Guest tapped "Notify me" and agreed to emails (needs Email).</summary>
+    public bool NotifyByEmail { get; set; }
+    /// <summary>A debounced notification job is waiting (see NotifyJobs). Null = none.</summary>
+    public DateTimeOffset? NotifyScheduledAt { get; set; }
     /// <summary>Last time we searched all event faces for this guest.</summary>
     public DateTimeOffset? LastSearchedAt { get; set; }
     public bool IsVip { get; set; }

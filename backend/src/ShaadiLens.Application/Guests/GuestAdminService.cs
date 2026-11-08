@@ -9,7 +9,7 @@ namespace ShaadiLens.Application.Guests;
 public sealed record GuestAdminDto(
     Guid Id, string? Name, string? Phone, string? Email, Guid ShareLinkId, bool HasSelfie,
     int MatchCount, int ProbableCount, int ConfirmedCount, int RejectedCount, int ReferenceCount,
-    DateTimeOffset CreatedAt, DateTimeOffset? LastSearchedAt);
+    DateTimeOffset CreatedAt, DateTimeOffset? LastSearchedAt, bool PushOn, bool EmailOn, DateTimeOffset? LastNotifiedAt);
 
 /// <summary>Face box normalised 0..1 (multiply by the image size).</summary>
 public sealed record FaceBoxDto(float X, float Y, float W, float H);
@@ -25,7 +25,8 @@ public sealed record SetMatchStatusRequest(MatchStatus Status);
 
 /// <summary>Admin view of registered guests + Match Review.</summary>
 public sealed class GuestAdminService(
-    IAppDbContext db, IStorageService storage, IFaceMatcher matcher, MatchFeedbackService feedback, IMediaUrlSigner urls)
+    IAppDbContext db, IStorageService storage, IFaceMatcher matcher, MatchFeedbackService feedback, IMediaUrlSigner urls,
+    IGuestNotifier notifier)
 {
     /// <summary>Enough for any one guest at a wedding; keeps the review page fast.</summary>
     public const int MaxReviewMatches = 1000;
@@ -75,6 +76,16 @@ public sealed class GuestAdminService(
         return await storage.OpenReadAsync(key, ct);
     }
 
+    /// <summary>Admin "resend notification": queues a push/email now (the guest must have turned notifications on).</summary>
+    public async Task NotifyAsync(Guid guestId, CancellationToken ct)
+    {
+        var g = await db.Guests.Where(x => x.Id == guestId)
+                    .Select(x => new { HasChannel = x.PushSubscriptionJson != null || (x.NotifyByEmail && x.Email != null) })
+                    .FirstOrDefaultAsync(ct) ?? throw new NotFoundException("Guest");
+        if (!g.HasChannel) throw new BadRequestException("This guest hasn't turned on notifications.");
+        notifier.SendNow(guestId);
+    }
+
     public async Task<MatchSummary> ResearchAsync(Guid guestId, CancellationToken ct)
     {
         if (!await db.Guests.AnyAsync(g => g.Id == guestId, ct)) throw new NotFoundException("Guest");
@@ -100,5 +111,5 @@ public sealed class GuestAdminService(
                 g.Matches.Count(m => m.Status == MatchStatus.Confirmed),
                 g.Matches.Count(m => m.Status == MatchStatus.Rejected),
                 g.References.Count,
-                g.CreatedAt, g.LastSearchedAt));
+                g.CreatedAt, g.LastSearchedAt, g.PushSubscriptionJson != null, g.NotifyByEmail, g.LastNotifiedAt));
 }

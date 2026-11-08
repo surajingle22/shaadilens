@@ -80,6 +80,14 @@ public sealed class ShareLinksController(ShareLinkService links, GuestAdminServi
         return File(await guestAdmin.OpenSelfieAsync(referenceId, ct), "image/jpeg");
     }
 
+    /// <summary>Send the guest a push/email now ("resend notification").</summary>
+    [HttpPost("guests/{guestId:guid}/notify")]
+    public async Task<IActionResult> Notify(Guid guestId, CancellationToken ct)
+    {
+        await guestAdmin.NotifyAsync(guestId, ct);
+        return Accepted();
+    }
+
     [HttpDelete("guests/{guestId:guid}")]
     public async Task<IActionResult> DeleteGuest(Guid guestId, CancellationToken ct)
     {

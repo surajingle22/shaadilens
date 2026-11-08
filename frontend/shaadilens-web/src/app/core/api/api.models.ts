@@ -218,6 +218,26 @@ export interface GuestAdmin {
   referenceCount: number;
   createdAt: string;
   lastSearchedAt: string | null;
+  pushOn: boolean;
+  emailOn: boolean;
+  lastNotifiedAt: string | null;
+}
+
+/** Admin → Settings (read-only; secrets live in .env). */
+export interface AppSettings {
+  publicBaseUrl: string;
+  storageRoot: string;
+  faceServiceUrl: string;
+  faceWorkers: number;
+  imageWorkers: number;
+  smtp: { configured: boolean; host: string | null; port: number; from: string | null };
+  push: { configured: boolean; publicKey: string | null; subject: string };
+}
+
+export interface VapidKeys {
+  publicKey: string;
+  privateKey: string;
+  envLines: string;
 }
 
 export type MatchStatus = 'Auto' | 'Probable' | 'Confirmed' | 'Rejected';

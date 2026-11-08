@@ -4,7 +4,10 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
 using ShaadiLens.Api.Auth;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ShaadiLens.Api.Infrastructure;
+using ShaadiLens.Api.Realtime;
+using ShaadiLens.Application.Abstractions;
 using ShaadiLens.Application;
 using ShaadiLens.Infrastructure;
 using ShaadiLens.Infrastructure.Persistence;
@@ -35,6 +38,11 @@ try
     builder.Services.AddApplication(builder.Configuration);     // use cases + validators
     builder.Services.AddInfrastructure(builder.Configuration);  // EF Core, Hangfire, storage, face-service
     builder.Services.AddAppAuth(builder.Configuration);         // JWT (admin cookie / guest bearer)
+
+    // Live updates (SignalR WebSockets at /hubs/events). Jobs send through IRealtimeNotifier.
+    builder.Services.AddSignalR()
+        .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    builder.Services.Replace(ServiceDescriptor.Singleton<IRealtimeNotifier, SignalRRealtimeNotifier>());
 
     // We sit behind nginx (and Cloudflare Tunnel): trust X-Forwarded-For/Proto so we see the real
     // client IP (rate limits) and know the request was HTTPS (secure cookies).
@@ -78,6 +86,7 @@ try
     app.UseRateLimiter();
 
     app.MapControllers();
+    app.MapHub<EventsHub>(EventsHub.Path);
 
     // Background job dashboard (queues, retries, failures) — admin only.
     app.MapHangfireDashboard("/hangfire", new DashboardOptions

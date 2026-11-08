@@ -167,6 +167,30 @@ Thresholds: `GET /events/{id}/face-settings/preview?threshold=` (histogram), `PO
 registration / "Find more" / rematch, reverse (one new photo × all guests) at the end of every face job, so the
 pipeline is now `Uploaded → Resized → FacesDetected → Matched`.
 
+## 7b. Live updates & notifications (Phase 2b)
+
+```
+ photo job (Hangfire, inside the api process)
+   └─ after face detection + reverse match
+        ├─ IRealtimeNotifier ──► SignalR hub /hubs/events
+        │     admin:{eventId}    "PhotoProcessed"   → progress bar, photos grid refresh (no polling)
+        │     viewers:{eventId}  "PhotoAdded"       → Full gallery: "3 new photos — tap to see"
+        │     guest:{guestId}    "NewMatchesForYou" → guest gallery banner
+        └─ IGuestNotifier (NotifyJobs) ──► debounced Hangfire job, max 1 per guest per 10 min
+              ├─ Web Push (WebPush NuGet, VAPID keys from .env) → phone notification, even when closed
+              └─ email (MailKit, SMTP from .env)                → only if the guest opted in
+```
+- **Hub auth**: the admin's cookie; guests send their JWT as `?access_token=` (WebSockets can't carry headers),
+  accepted only on `/hubs`. nginx doesn't access-log `/hubs` so tokens never land in logs.
+- **"Notify me"**: `PUT /public/me/notifications {subscription, email}` stores the browser's PushSubscription
+  (an https endpoint at Google/Mozilla/Apple + keys) and/or the email opt-in; `DELETE` turns both off.
+  A 404/410 from the push service means the phone unsubscribed → the subscription is dropped.
+- **PWA**: Angular service worker (`ngsw-config.json`) + `manifest.webmanifest`: installable ("Add to Home
+  Screen"), shows push notifications, opens the guest's gallery on tap. `/` sends a guest who installed the app
+  to their last gallery. The worker never handles `/api`, `/media`, `/hubs`, `/hangfire`.
+- **Settings** (`/api/v1/settings`): read-only status, "Send test email", "Generate VAPID keys" (shown once,
+  never stored — paste into `.env`).
+
 ## 8. Configuration
 
 All secrets via `.env` → environment variables → ASP.NET Core configuration

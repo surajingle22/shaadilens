@@ -1,4 +1,4 @@
-import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -110,6 +110,16 @@ export class PhotosPage {
       this.status();
       if (eventId) void this.reset();
     });
+
+    // Live: photos finished processing → refresh the grid (debounced), but only while the admin is still
+    // looking at the first page — never yank the list away from someone who scrolled down.
+    let liveTimer: ReturnType<typeof setTimeout> | undefined;
+    effect(() => {
+      if (this.ctx.photoTick() === 0) return;
+      clearTimeout(liveTimer);
+      liveTimer = setTimeout(() => untracked(() => { if (this.page <= 1 && !this.loading()) void this.reset(); }), 2000);
+    });
+    inject(DestroyRef).onDestroy(() => clearTimeout(liveTimer));
 
     const destroyRef = inject(DestroyRef);
     afterNextRender(() => {

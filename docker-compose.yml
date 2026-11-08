@@ -56,6 +56,14 @@ services:
       Media__SigningKey: ${MEDIA_SIGNING_KEY:?Set MEDIA_SIGNING_KEY in .env (64 random chars)}
       Processing__FaceWorkers: ${FACE_WORKERS:-3}
       Uploads__MaxFileSizeMb: ${MAX_UPLOAD_MB:-50}
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__User: ${SMTP_USER:-}
+      Smtp__Pass: ${SMTP_PASS:-}
+      Smtp__From: ${SMTP_FROM:-}
+      Push__PublicKey: ${VAPID_PUBLIC:-}
+      Push__PrivateKey: ${VAPID_PRIVATE:-}
+      Push__Subject: ${VAPID_SUBJECT:-mailto:admin@example.com}
     volumes:
       - photos:/data/photos
     depends_on:

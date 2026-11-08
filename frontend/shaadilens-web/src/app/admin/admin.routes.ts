@@ -25,6 +25,7 @@ export const ADMIN_ROUTES: Routes = [
         ],
       },
       { path: 'system', loadComponent: () => import('./dashboard/dashboard').then((m) => m.Dashboard), title: 'System · ShaadiLens' },
+      { path: 'settings', loadComponent: () => import('./settings/settings-page').then((m) => m.SettingsPage), title: 'Settings · ShaadiLens' },
     ],
   },
 ];

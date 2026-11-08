@@ -7,6 +7,7 @@ import { Injectable, signal } from '@angular/core';
 @Injectable({ providedIn: 'root' })
 export class GuestSession {
   private static readonly prefix = 'sl_guest_';
+  private static readonly lastKey = 'sl_last_link';
 
   /** Token for the link currently open (sent as Bearer on /api/v1/public/*). */
   readonly token = signal<string | null>(null);
@@ -22,6 +23,7 @@ export class GuestSession {
     this.token.set(jwt);
     try {
       localStorage.setItem(GuestSession.prefix + linkToken, JSON.stringify({ jwt, expiresAt }));
+      localStorage.setItem(GuestSession.lastKey, linkToken);
     } catch {
       // Private browsing / storage blocked: the session still works until the tab closes.
     }
@@ -31,8 +33,22 @@ export class GuestSession {
     this.token.set(null);
     try {
       localStorage.removeItem(GuestSession.prefix + linkToken);
+      if (localStorage.getItem(GuestSession.lastKey) === linkToken) localStorage.removeItem(GuestSession.lastKey);
     } catch {
       /* ignore */
+    }
+  }
+
+  /**
+   * The gallery link this phone used last, if its session is still valid. The installed app (PWA) starts
+   * at "/", which sends guests straight back to their photos instead of the admin login.
+   */
+  lastLink(): string | null {
+    try {
+      const link = localStorage.getItem(GuestSession.lastKey);
+      return link && this.read(link) ? link : null;
+    } catch {
+      return null;
     }
   }
 

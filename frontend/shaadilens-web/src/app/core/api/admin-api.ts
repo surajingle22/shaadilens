@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { API } from './api-urls';
 import {
+  AppSettings,
   Collection,
   CompleteUploadResponse,
   EventDetail,
@@ -25,6 +26,7 @@ import {
   ShareLink,
   UpdatePhotoRequest,
   UploadStatusResponse,
+  VapidKeys,
 } from './api.models';
 
 /**
@@ -93,6 +95,13 @@ export class AdminApi {
   thresholdPreview = (eventId: string) => this.get<ThresholdPreview>(API.thresholdPreview(eventId));
   /** Search again for every guest in the background (apply new thresholds to everyone). */
   rematchAll = (eventId: string) => this.post<void>(API.rematch(eventId), {});
+  /** Push/email the guest now ("resend notification"). */
+  notifyGuest = (id: string) => this.post<void>(API.guestNotify(id), {});
+
+  // ---------- settings ----------
+  settings = () => this.get<AppSettings>(API.settings);
+  testEmail = (to: string) => this.post<void>(API.testEmail, { to });
+  vapidKeys = () => this.post<VapidKeys>(API.vapidKeys, {});
 
   // ---------- helpers ----------
   private get<T>(url: string) {

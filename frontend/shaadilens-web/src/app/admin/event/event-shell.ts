@@ -4,13 +4,14 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Realtime } from '../../core/realtime/realtime';
 import { EventContext } from './event-context';
 
 /** Event header + tab navigation. Each tab is its own lazy-loaded child route. */
 @Component({
   selector: 'app-event-shell',
   imports: [MatTabsModule, MatIconModule, MatChipsModule, MatProgressBarModule, RouterOutlet, RouterLink, RouterLinkActive],
-  providers: [EventContext],
+  providers: [EventContext, Realtime],
   template: `
     @if (ctx.event.hasValue()) {
       <header class="page-header">

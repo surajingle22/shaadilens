@@ -74,10 +74,10 @@ export class EventOverview {
       this.collections.set(ev.collections);
     });
 
-    // While photos are processing, refresh the numbers every 3 s.
+    // Live updates come over SignalR (EventContext). If that connection is down, poll every 3 s instead.
     const timer = setInterval(() => {
       const s = this.stats.value();
-      if (s && s.pending > 0 && !this.stats.isLoading()) this.stats.reload();
+      if (!this.ctx.live() && s && s.pending > 0 && !this.stats.isLoading()) this.stats.reload();
     }, 3000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }

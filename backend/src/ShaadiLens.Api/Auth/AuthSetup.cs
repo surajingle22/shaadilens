@@ -41,7 +41,14 @@ public static class AuthSetup
                     // instead — that's what makes /hangfire and plain <a href> downloads work for the admin.
                     OnMessageReceived = ctx =>
                     {
-                        if (string.IsNullOrEmpty(ctx.Request.Headers.Authorization) &&
+                        // Browsers can't add headers to a WebSocket, so the SignalR client sends the guest
+                        // token as ?access_token=… — accepted ONLY on the hub path.
+                        if (ctx.Request.Path.StartsWithSegments("/hubs") &&
+                            ctx.Request.Query.TryGetValue("access_token", out var hubToken) && !string.IsNullOrEmpty(hubToken))
+                        {
+                            ctx.Token = hubToken;
+                        }
+                        else if (string.IsNullOrEmpty(ctx.Request.Headers.Authorization) &&
                             ctx.Request.Cookies.TryGetValue(AuthConstants.AdminCookie, out var cookie))
                         {
                             ctx.Token = cookie;

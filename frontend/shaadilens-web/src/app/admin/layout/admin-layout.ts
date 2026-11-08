@@ -21,6 +21,7 @@ import { UploadQueue } from '../upload/upload-queue';
         <mat-icon>more_vert</mat-icon>
       </button>
       <mat-menu #menu="matMenu">
+        <a mat-menu-item routerLink="/admin/settings"><mat-icon>settings</mat-icon> Settings</a>
         <a mat-menu-item routerLink="/admin/system"><mat-icon>monitor_heart</mat-icon> System status</a>
         <a mat-menu-item [href]="hangfireUrl" target="_blank" rel="noopener"><mat-icon>work_history</mat-icon> Background jobs</a>
         <button mat-menu-item (click)="logout()"><mat-icon>logout</mat-icon> Sign out ({{ auth.session()?.email }})</button>

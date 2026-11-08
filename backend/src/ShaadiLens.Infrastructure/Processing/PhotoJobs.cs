@@ -34,6 +34,8 @@ public sealed class PhotoJobs(
     ImageProcessor images,
     IFaceEngine faceEngine,
     IFaceMatcher matcher,
+    IRealtimeNotifier realtime,
+    IGuestNotifier notifier,
     IStorageService storage,
     IBackgroundJobClient jobs,
     ILogger<PhotoJobs> log)
@@ -71,6 +73,7 @@ public sealed class PhotoJobs(
             await db.SaveChangesAsync(ct);
             log.LogInformation("Prepared photo {PhotoId} ({Width}x{Height}) in {Ms} ms",
                 photoId, photo.Width, photo.Height, sw.ElapsedMilliseconds);
+            await realtime.PhotoProcessedAsync(photo.EventId, photoId, photo.Status, ct); // thumbnail is ready
         }
 
         jobs.Enqueue<PhotoJobs>(j => j.DetectFacesAsync(photoId, null, CancellationToken.None));
@@ -126,7 +129,20 @@ public sealed class PhotoJobs(
             photoId, kept.Count, result.Faces.Count, sw.ElapsedMilliseconds, (int)result.ElapsedMs);
 
         // Reverse search: does anyone who already registered appear in this new photo?
-        await matcher.MatchPhotoAsync(photoId, decisions, ct);
+        var newlyVisible = await matcher.MatchPhotoAsync(photoId, decisions, ct);
+
+        // Tell open browsers (admin progress, Full-gallery viewers, guests' "new photos" banner) and queue
+        // the debounced push/email for guests who aren't looking right now.
+        await realtime.PhotoProcessedAsync(photo.EventId, photoId, photo.Status, ct);
+        foreach (var guestId in newlyVisible) await realtime.NewMatchesAsync(guestId, 1, ct);
+        try
+        {
+            await notifier.GuestsGotNewPhotosAsync(newlyVisible, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "Could not schedule notifications for photo {PhotoId}", photoId); // the photo itself is fine
+        }
     }
 
     /// <summary>Stores the box normalised to 0..1 so it overlays correctly on thumb, web or original.</summary>
@@ -153,6 +169,7 @@ public sealed class PhotoJobs(
         photo.Status = PhotoStatus.Failed;
         photo.Error = error.Length > 500 ? error[..500] : error;
         await db.SaveChangesAsync(ct);
+        await realtime.PhotoProcessedAsync(photo.EventId, photo.Id, photo.Status, ct);
     }
 
     /// <summary>Hangfire stores how many times it already retried this job.</summary>

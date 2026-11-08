@@ -34,6 +34,15 @@ export interface GuestSessionInfo {
   lastSearchedAt: string | null;
   selfieCount: number;
   maxSelfies: number;
+  notifications: NotificationStatus;
+}
+
+/** "Notify me" state. pushPublicKey = null → Web Push isn't set up on this server. */
+export interface NotificationStatus {
+  pushPublicKey: string | null;
+  pushOn: boolean;
+  emailAvailable: boolean;
+  emailOn: boolean;
 }
 
 export interface GuestPhoto {
@@ -107,6 +116,11 @@ export class GuestApi {
     return firstValueFrom(this.http.post<MatchSummary>(`${this.base}/me/selfie`, body));
   }
   deleteMe = () => firstValueFrom(this.http.delete<void>(`${this.base}/me`));
+
+  /** Turn on push (browser subscription) and/or email; both null/false = off. */
+  setNotifications = (subscription: PushSubscriptionJSON | null, email: boolean) =>
+    firstValueFrom(this.http.put<NotificationStatus>(`${this.base}/me/notifications`, { subscription, email }));
+  notificationsOff = () => firstValueFrom(this.http.delete<NotificationStatus>(`${this.base}/me/notifications`));
 
   /** "Your photos" (Guest links) or the whole gallery (Full links). */
   photos(kind: 'mine' | 'gallery', collectionId: string | null, page: number, pageSize = 60) {

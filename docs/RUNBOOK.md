@@ -21,6 +21,8 @@ Production-style (no debug ports): `docker compose -f docker-compose.yml up -d`.
 | `/health` shows `face-service: Unhealthy` right after start | Normal for ~30–60 s while models load. `docker compose logs face-service` |
 | face-service image build fails on model download | Network hiccup; re-run `docker compose build face-service` (curl retries + resumes) |
 | Port 8080 already in use | Set `WEB_PORT=8081` in `.env` |
+| Admin progress bar doesn't move live | Live updates use WebSockets on `/hubs`; the page falls back to polling every 3 s. Check `docker compose logs web api` |
+| "Notify me" missing for guests | Web Push needs VAPID keys (Settings) or SMTP + the guest's email; phones also need HTTPS |
 | Postgres password changed in `.env` but login fails | The password is set only when the volume is first created. `docker compose down -v` (deletes data) or change it inside Postgres |
 
 ## Measured performance
@@ -57,6 +59,19 @@ cloudflared tunnel run --url http://localhost:8080 shaadilens
 Set `PUBLIC_BASE_URL=https://photos.yourdomain.com` and `ASPNETCORE_ENVIRONMENT=Production` (turns Swagger off).
 nginx passes Cloudflare's `X-Forwarded-Proto: https` through, so the admin cookie is marked Secure.
 
+
+## Notifications (optional)
+
+**Web Push** (free; works on Android/desktop; iPhone only after "Add to Home Screen", iOS 16.4+):
+1. Admin → ⋮ → **Settings** → **Generate VAPID keys** → copy the two lines into `.env`.
+2. `docker compose up -d api`. Guests now see **Notify me** in their gallery.
+3. Phones need HTTPS for this → use the Cloudflare Tunnel address (above).
+
+**Email** (e.g. Gmail): in `.env` set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER=you@gmail.com`,
+`SMTP_PASS=<App Password>` (Google Account → Security → 2-Step Verification → App passwords), `SMTP_FROM=you@gmail.com`.
+Restart the api, then Settings → **Send test email**. Guests who gave an email can tick "Also email me".
+
+Guests get at most one message per 10 minutes ("12 new photos of you!"). Guests → **send** icon resends now.
 ## Backup / restore
 
 Everything lives in two Docker volumes: `shaadilens_pgdata` (database) and `shaadilens_photos` (files).

@@ -41,6 +41,17 @@
   </div>
 }
 
+@if (!isFull() && session().hasSelfie) {
+  <app-notify-card [initial]="session().notifications" />
+}
+
+@if (newPhotos() > 0) {
+  <button class="live-banner" (click)="showNew()">
+    <mat-icon>arrow_upward</mat-icon>
+    {{ newPhotos() }} new photo{{ newPhotos() === 1 ? '' : 's' }}{{ isFull() ? '' : ' of you' }} — tap to see
+  </button>
+}
+
 <!-- Collection tabs -->
 @if ((collections.value() ?? []).length > 1) {
   <mat-chip-listbox class="tabs" [value]="collectionId()" (change)="collectionId.set($event.value ?? null)" aria-label="Collections">

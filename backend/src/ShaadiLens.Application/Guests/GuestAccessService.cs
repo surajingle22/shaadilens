@@ -27,6 +27,8 @@ public sealed class GuestAccessService(
     IFaceMatcher matcher,
     IImageTools images,
     IMediaUrlSigner urls,
+    IPushSender push,
+    IEmailSender email,
     MatchFeedbackService feedback,
     TimeProvider time,
     ILogger<GuestAccessService> log)
@@ -123,7 +125,12 @@ public sealed class GuestAccessService(
             link.AllowSingleDownload, link.AllowBulkDownload,
             counts.GetValueOrDefault(MatchStatus.Auto) + counts.GetValueOrDefault(MatchStatus.Confirmed),
             counts.GetValueOrDefault(MatchStatus.Probable),
-            guest?.LastSearchedAt, selfies, MaxSelfies);
+            guest?.LastSearchedAt, selfies, MaxSelfies,
+            new NotificationStatusDto(
+                PushPublicKey: push.PublicKey,
+                PushOn: guest?.PushSubscriptionJson is not null,
+                EmailAvailable: email.IsConfigured && guest?.Email is not null,
+                EmailOn: guest?.NotifyByEmail == true && email.IsConfigured));
     }
 
     /// <summary>"Your photos": Auto + Confirmed matches.</summary>
@@ -185,6 +192,38 @@ public sealed class GuestAccessService(
         await OpenSessionAsync(ctx, ct);
         return await matcher.SearchForGuestAsync(guestId, ct);
     }
+
+    /// <summary>
+    /// "Notify me when new photos of me arrive": stores the browser's push subscription and/or the email
+    /// opt-in. Calling it with no subscription and Email=false turns everything off.
+    /// </summary>
+    public async Task<NotificationStatusDto> SetNotificationsAsync(GuestContext ctx, NotificationRequest req, CancellationToken ct)
+    {
+        var guestId = RequireGuest(ctx);
+        await OpenSessionAsync(ctx, ct);
+        var guest = await db.Guests.FirstAsync(g => g.Id == guestId, ct);
+
+        string? subscription = null;
+        if (req.Subscription is { ValueKind: System.Text.Json.JsonValueKind.Object } s)
+        {
+            subscription = s.GetRawText();
+            if (subscription.Length > 4000 || !IsValidPushSubscription(s))
+                throw new BadRequestException("That push subscription doesn't look right.");
+        }
+        guest.PushSubscriptionJson = subscription;
+        guest.NotifyByEmail = req.Email && guest.Email is not null;
+        await db.SaveChangesAsync(ct);
+        return new NotificationStatusDto(push.PublicKey, guest.PushSubscriptionJson is not null,
+            email.IsConfigured && guest.Email is not null, guest.NotifyByEmail && email.IsConfigured);
+    }
+
+    /// <summary>{ endpoint: "https://…", keys: { p256dh, auth } } — what PushManager.subscribe() returns.</summary>
+    private static bool IsValidPushSubscription(System.Text.Json.JsonElement s) =>
+        s.TryGetProperty("endpoint", out var endpoint) && endpoint.ValueKind == System.Text.Json.JsonValueKind.String &&
+        Uri.TryCreate(endpoint.GetString(), UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps &&
+        s.TryGetProperty("keys", out var keys) && keys.ValueKind == System.Text.Json.JsonValueKind.Object &&
+        keys.TryGetProperty("p256dh", out var p) && p.ValueKind == System.Text.Json.JsonValueKind.String &&
+        keys.TryGetProperty("auth", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.String;
 
     /// <summary>"Yes, that's me" (usually on a "Might be you?" photo).</summary>
     public Task ConfirmAsync(GuestContext ctx, Guid photoId, CancellationToken ct) =>

@@ -27,6 +27,15 @@ describe('GuestSession', () => {
     expect(localStorage.getItem('sl_guest_old')).toBeNull();
   });
 
+  it('remembers the last gallery so the installed app opens it', () => {
+    expect(s.lastLink()).toBeNull();
+    s.save('linkA', 'jwt-a', new Date(Date.now() + 86_400_000).toISOString());
+    s.save('linkB', 'jwt-b', new Date(Date.now() + 86_400_000).toISOString());
+    expect(s.lastLink()).toBe('linkB');
+    s.forget('linkB');
+    expect(s.lastLink()).toBeNull();
+  });
+
   it('forget removes the token', () => {
     s.save('x', 'jwt', new Date(Date.now() + 60_000).toISOString());
     s.forget('x');

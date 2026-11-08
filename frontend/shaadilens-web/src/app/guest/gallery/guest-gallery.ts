@@ -8,7 +8,10 @@ import { GuestApi, GuestPhoto, GuestSessionInfo } from '../../core/api/guest-api
 import { HttpErrorResponse } from '@angular/common/http';
 import { Notify, errorMessage } from '../../core/notify';
 import { SelfieStep } from '../steps/selfie-step';
+import { GuestSession } from '../../core/guest/guest-session';
+import { Realtime } from '../../core/realtime/realtime';
 import { Lightbox } from './lightbox';
+import { NotifyCard } from './notify-card';
 
 const PAGE_SIZE = 60;
 
@@ -19,13 +22,18 @@ const PAGE_SIZE = 60;
  */
 @Component({
   selector: 'app-guest-gallery',
-  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox, SelfieStep],
+  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox, SelfieStep, NotifyCard],
+  providers: [Realtime],
   templateUrl: './guest-gallery.html',
   styleUrl: './guest-gallery.scss',
 })
 export class GuestGallery {
   private readonly api = inject(GuestApi);
   private readonly notify = inject(Notify);
+  private readonly realtime = inject(Realtime);
+  private readonly guestSession = inject(GuestSession);
+  /** Photos that arrived while the gallery is open (SignalR); shown as a tap-to-refresh banner. */
+  protected readonly newPhotos = signal(0);
 
   readonly token = input.required<string>();
   readonly session = input.required<GuestSessionInfo>();
@@ -63,6 +71,7 @@ export class GuestGallery {
 
   constructor() {
     effect(() => this.selfieCount.set(this.session().selfieCount));
+    afterNextRender(() => void this.goLive());
     effect(() => {
       this.collectionId();
       untracked(() => void this.reset());
@@ -77,6 +86,25 @@ export class GuestGallery {
       if (el) observer.observe(el);
       destroyRef.onDestroy(() => observer.disconnect());
     });
+  }
+
+  /** Live connection: Guest links hear "new photos of you", Full links hear "new photo in the gallery". */
+  private async goLive(): Promise<void> {
+    const token = this.guestSession.token();
+    if (!token) return;
+    await this.realtime.connect(token);
+    this.realtime.on('NewMatchesForYou', (m) => this.newPhotos.update((n) => n + m.count));
+    this.realtime.on('PhotoAdded', () => this.newPhotos.update((n) => n + 1));
+  }
+
+  /** Tap on the "N new photos" banner. */
+  protected async showNew(): Promise<void> {
+    this.newPhotos.set(0);
+    this.collections.reload();
+    this.probable.reload();
+    this.collectionId.set(null);
+    await this.reset();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   private async reset(): Promise<void> {
