@@ -33,6 +33,22 @@ import { Notify } from '../../core/notify';
       </section>
 
       <section class="panel">
+        <h2><mat-icon>movie</mat-icon> Highlight reels</h2>
+        @if (s.reels.workerOnline) {
+          <p class="ok"><mat-icon>check_circle</mat-icon> Reel worker is running.</p>
+        } @else {
+          <p class="off"><mat-icon>error_outline</mat-icon> Reel worker isn’t running — reels stay “Making your reel…”. Start it: <code>docker compose up -d reel-worker</code></p>
+        }
+        @if (s.reels.tracks.length) {
+          <p>{{ s.reels.tracks.length }} music track(s) in <code>./music</code> (one is picked at random per reel):</p>
+          <ul class="tracks">@for (t of s.reels.tracks; track t) { <li>{{ t }}</li> }</ul>
+        } @else {
+          <p class="off"><mat-icon>music_off</mat-icon> No music yet — reels are silent. Put royalty-free .mp3 files in the <code>music</code> folder next to docker-compose.yml.</p>
+        }
+        <p class="small muted">Turn reels on/off and choose the number of photos per event on its Overview tab. CPU limit: <code>REEL_CPUS</code>.</p>
+      </section>
+
+      <section class="panel">
         <h2><mat-icon>mail</mat-icon> Email</h2>
         @if (s.smtp.configured) {
           <p class="ok"><mat-icon>check_circle</mat-icon> Sending via <code>{{ s.smtp.host }}:{{ s.smtp.port }}</code> as <code>{{ s.smtp.from }}</code></p>
@@ -80,6 +96,7 @@ import { Notify } from '../../core/notify';
     .inline { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
     .keys { background: var(--mat-sys-surface-container); padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12px; }
     section { margin-bottom: 16px; }
+    .tracks { margin: 4px 0 8px; padding-left: 20px; columns: 2; font-size: 14px; }
   `,
 })
 export class SettingsPage {

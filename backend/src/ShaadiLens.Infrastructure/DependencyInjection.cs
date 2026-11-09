@@ -27,6 +27,11 @@ public sealed class ProcessingOptions
     public int ImageWorkers { get; set; } = 2;
     /// <summary>Parallel face-detection jobs (env FACE_WORKERS). Spec default: CPU cores − 1.</summary>
     public int FaceWorkers { get; set; } = Math.Max(1, Environment.ProcessorCount - 1);
+    /// <summary>
+    /// Parallel reel (video) renders. docker-compose sets 0 for the api and 1 for the reel-worker container, so
+    /// encoding never competes with uploads; outside Docker one process does everything.
+    /// </summary>
+    public int VideoWorkers { get; set; } = 1;
 }
 
 public static class DependencyInjection
@@ -86,6 +91,10 @@ public static class DependencyInjection
         services.AddScoped<MatchJobs>();
         services.AddScoped<PurgeJobs>();
         services.AddScoped<ClusterJobs>();
+        services.AddScoped<Reels.ReelJobs>();
+        services.AddSingleton<Reels.MusicLibrary>();
+        services.Configure<Reels.ReelRenderOptions>(config.GetSection(Reels.ReelRenderOptions.Section));
+        services.TryAddSingleton<Reels.IReelRenderer, Reels.FfmpegReelRenderer>();
         services.AddScoped<IPhotoPipelineScheduler, HangfirePhotoPipelineScheduler>();
         services.AddHangfire(cfg => cfg
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -98,19 +107,23 @@ public static class DependencyInjection
         var processing = config.GetSection(ProcessingOptions.Section).Get<ProcessingOptions>() ?? new ProcessingOptions();
         if (processing.RunJobServer)
         {
-            // Two Hangfire "servers" in this process = two worker pools with their own sizes.
-            services.AddHangfireServer(o =>
+            // Several Hangfire "servers" in this process = worker pools with their own sizes. A pool with 0 workers
+            // isn't started (the reel-worker container runs only "video"; the api runs everything else).
+            foreach (var (name, queue, workers) in new[]
+                     {
+                         ("images", "default", processing.ImageWorkers),
+                         ("faces", "faces", processing.FaceWorkers),
+                         ("video", "video", processing.VideoWorkers),
+                     })
             {
-                o.ServerName = "images";
-                o.Queues = ["default"];
-                o.WorkerCount = processing.ImageWorkers;
-            });
-            services.AddHangfireServer(o =>
-            {
-                o.ServerName = "faces";
-                o.Queues = ["faces"];
-                o.WorkerCount = processing.FaceWorkers;
-            });
+                if (workers <= 0) continue;
+                services.AddHangfireServer(o =>
+                {
+                    o.ServerName = name;
+                    o.Queues = [queue];
+                    o.WorkerCount = workers;
+                });
+            }
         }
 
         // ---- Health checks ----

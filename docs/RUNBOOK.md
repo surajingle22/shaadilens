@@ -139,3 +139,11 @@ Hidden chip → open → Show to guests). Events uploaded before this feature: c
 Thresholds (rarely needed) in `.env`, e.g. `Culling__BlurryFaceBelow=60`, `Culling__ClosedEyesBelow=0.17`,
 `Culling__DuplicateMaxBits=10`, `Culling__BurstWindowSeconds=60`, then `docker compose up -d api` and re-run
 face detection / Analyze. See docs/AI-PIPELINE.md §4g for what they mean.
+
+## Highlight reels (guest videos)
+Guests with a selfie see **Your highlight reel → Make my reel** once they have ≥ 3 photos. The `reel-worker`
+container renders it (Settings → Highlight reels shows whether it runs). Per event: Overview → Highlight reels
+(on/off, photos per reel). Music: put royalty-free tracks in `./music` (see music/README.md), no restart needed.
+Speed (i5-8250U, `REEL_CPUS=2`): 12 photos ≈ 2 min, 30 s video ≈ 12 MB. More cores: `REEL_CPUS=4` in `.env`,
+then `docker compose up -d reel-worker`. A reel stuck at "Making your reel…": `docker compose ps reel-worker`,
+`docker compose logs reel-worker`. Limits: one reel at a time, 3 per guest per 24 h (`Reels__MaxPerDay`).

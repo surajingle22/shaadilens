@@ -1,3 +1,4 @@
+using ShaadiLens.Application.Reels;
 using FluentValidation;
 using ShaadiLens.Domain.Entities;
 using ShaadiLens.Domain.Enums;
@@ -19,7 +20,7 @@ public sealed record EventDto(
     Guid Id, string Name, string Slug, DateOnly? Date, string? Venue, string ThemeColor, string? TitleFont,
     bool WatermarkEnabled, string? WatermarkText, bool IsPublished, bool FaceSearchEnabled, Guid? CoverPhotoId, string? CoverUrl,
     DateTimeOffset? ExpiresAt, DateTimeOffset CreatedAt, FaceSettingsDto FaceSettings, DateTimeOffset? PurgedAt,
-    IReadOnlyList<CollectionDto> Collections);
+    IReadOnlyList<CollectionDto> Collections, ReelSettingsDto Reels);
 
 public sealed record SaveEventRequest(
     string Name, DateOnly? Date, string? Venue, string? ThemeColor, string? TitleFont,

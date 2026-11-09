@@ -1,3 +1,4 @@
+using ShaadiLens.Application.Reels;
 using Microsoft.EntityFrameworkCore;
 using ShaadiLens.Application.Abstractions;
 using ShaadiLens.Application.Common;
@@ -65,6 +66,15 @@ public sealed class EventService(
         if (photoId is { } pid && !await db.Photos.AnyAsync(p => p.Id == pid && p.EventId == id && p.StorageKeyWeb != null, ct))
             throw new BadRequestException("Cover must be a processed photo of this event");
         ev.CoverPhotoId = photoId;
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateReelSettingsAsync(Guid id, ReelSettingsDto s, CancellationToken ct)
+    {
+        if (s.PhotoCount is < 3 or > 30) throw new BadRequestException("A reel can have 3 to 30 photos.");
+        var ev = await FindAsync(id, ct);
+        ev.ReelsEnabled = s.Enabled;
+        ev.ReelPhotoCount = s.PhotoCount;
         await db.SaveChangesAsync(ct);
     }
 
@@ -214,6 +224,7 @@ public sealed class EventService(
         return new EventDto(ev.Id, ev.Name, ev.Slug, ev.Date, ev.Venue, ev.ThemeColor, ev.TitleFont,
             ev.WatermarkEnabled, ev.WatermarkText, ev.IsPublished, ev.FaceSearchEnabled, ev.CoverPhotoId,
             ev.CoverPhotoId is { } cover ? urls.GetUrl(cover, PhotoVariant.Web) : null, ev.ExpiresAt, ev.CreatedAt,
-            FaceSettingsDto.From(ev.FaceSettings), ev.PurgedAt, collections);
+            FaceSettingsDto.From(ev.FaceSettings), ev.PurgedAt, collections,
+            new ReelSettingsDto(ev.ReelsEnabled, ev.ReelPhotoCount));
     }
 }

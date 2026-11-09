@@ -29,6 +29,11 @@ export interface AdminSession {
   expiresAt: string | null;
 }
 
+export interface ReelSettings {
+  enabled: boolean;
+  photoCount: number;
+}
+
 export interface FaceSettings {
   matchThreshold: number;
   probableThreshold: number;
@@ -77,6 +82,7 @@ export interface EventDetail {
   purgedAt: string | null;
   faceSettings: FaceSettings;
   collections: Collection[];
+  reels: ReelSettings;
 }
 
 export interface SaveEventRequest {
@@ -279,6 +285,8 @@ export interface AppSettings {
   imageWorkers: number;
   smtp: { configured: boolean; host: string | null; port: number; from: string | null };
   push: { configured: boolean; publicKey: string | null; subject: string };
+  /** Highlight reels: music found in ./music, and whether the reel-worker container is running. */
+  reels: { musicFolder: string; tracks: string[]; workerOnline: boolean };
 }
 
 export interface VapidKeys {

@@ -137,4 +137,5 @@ public sealed class NullRealtimeNotifier : IRealtimeNotifier
 {
     public Task PhotoProcessedAsync(Guid eventId, Guid photoId, PhotoStatus status, CancellationToken ct = default) => Task.CompletedTask;
     public Task NewMatchesAsync(Guid guestId, int count, CancellationToken ct = default) => Task.CompletedTask;
+    public Task ReelUpdatedAsync(Guid guestId, Guid reelId, Domain.Entities.ReelStatus status, CancellationToken ct = default) => Task.CompletedTask;
 }

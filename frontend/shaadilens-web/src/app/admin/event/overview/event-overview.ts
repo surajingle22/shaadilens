@@ -68,6 +68,11 @@ export class EventOverview {
     maxSelfieYaw: [30, [Validators.required, Validators.min(5), Validators.max(90)]],
   });
 
+  protected readonly reels = this.fb.group({
+    enabled: [true],
+    photoCount: [12, [Validators.required, Validators.min(3), Validators.max(30)]],
+  });
+
   protected readonly collections = signal<Collection[]>([]);
   protected readonly newCollection = signal('');
   protected readonly saving = signal(false);
@@ -83,6 +88,7 @@ export class EventOverview {
         titleFont: ev.titleFont, watermarkEnabled: ev.watermarkEnabled, watermarkText: ev.watermarkText ?? '',
       });
       this.faces.reset(ev.faceSettings);
+      this.reels.reset(ev.reels);
       this.collections.set(ev.collections);
     });
 
@@ -123,6 +129,10 @@ export class EventOverview {
         this.notify.ok(`Updating ${r.queued} photo(s) in the background…`);
       }, undefined, false);
     }
+  }
+
+  protected async saveReelSettings(): Promise<void> {
+    await this.run(() => this.api.saveReelSettings(this.event.id, this.reels.getRawValue()), 'Reel settings saved');
   }
 
   protected async saveFaceSettings(): Promise<void> {

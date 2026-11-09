@@ -1,4 +1,5 @@
 import { DestroyRef, Injectable, inject, signal } from '@angular/core';
+import type { ReelStatus } from '../api/guest-api';
 import { HubConnection, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
 
 /** Messages the server pushes (see EventsHub.cs). */
@@ -9,6 +10,8 @@ export interface HubMessages {
   PhotoAdded: { photoId: string };
   /** Guest: new photos of you just arrived. */
   NewMatchesForYou: { count: number };
+  /** Guest: your highlight reel changed state (Rendering → Ready / Failed). */
+  ReelUpdated: { reelId: string; status: ReelStatus };
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   EventStats,
   EventSummary,
   FaceSettings,
+  ReelSettings,
   GuestAdmin,
   GuestReview,
   MatchStatus,
@@ -50,6 +51,7 @@ export class AdminApi {
   publish = (id: string, isPublished: boolean) => this.post<void>(API.publish(id), { isPublished });
   stats = (id: string) => this.get<EventStats>(API.stats(id));
   saveFaceSettings = (id: string, s: FaceSettings) => this.put<void>(API.faceSettings(id), s);
+  saveReelSettings = (id: string, s: ReelSettings) => this.put<void>(API.reelSettings(id), s);
   setCover = (id: string, photoId: string | null) => this.put<void>(API.cover(id), { photoId });
 
   // ---------- collections ----------

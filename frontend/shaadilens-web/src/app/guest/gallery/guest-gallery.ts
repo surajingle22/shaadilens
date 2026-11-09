@@ -12,6 +12,7 @@ import { GuestSession } from '../../core/guest/guest-session';
 import { Realtime } from '../../core/realtime/realtime';
 import { Lightbox } from './lightbox';
 import { NotifyCard } from './notify-card';
+import { ReelCard } from './reel-card';
 
 const PAGE_SIZE = 60;
 
@@ -22,7 +23,7 @@ const PAGE_SIZE = 60;
  */
 @Component({
   selector: 'app-guest-gallery',
-  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox, SelfieStep, NotifyCard],
+  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox, SelfieStep, NotifyCard, ReelCard],
   providers: [Realtime],
   templateUrl: './guest-gallery.html',
   styleUrl: './guest-gallery.scss',
@@ -34,6 +35,8 @@ export class GuestGallery {
   private readonly guestSession = inject(GuestSession);
   /** Photos that arrived while the gallery is open (SignalR); shown as a tap-to-refresh banner. */
   protected readonly newPhotos = signal(0);
+  /** Bumped when SignalR says the guest's reel changed → the reel card reloads. */
+  protected readonly reelTick = signal(0);
 
   readonly token = input.required<string>();
   readonly session = input.required<GuestSessionInfo>();
@@ -142,6 +145,7 @@ export class GuestGallery {
     await this.realtime.connect(token);
     this.realtime.on('NewMatchesForYou', (m) => this.newPhotos.update((n) => n + m.count));
     this.realtime.on('PhotoAdded', () => this.newPhotos.update((n) => n + 1));
+    this.realtime.on('ReelUpdated', () => this.reelTick.update((n) => n + 1));
   }
 
   /** Tap on the "N new photos" banner. */

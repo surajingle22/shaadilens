@@ -16,7 +16,7 @@ COPY . .
 RUN dotnet publish src/ShaadiLens.Api/ShaadiLens.Api.csproj -c Release -o /app --no-restore
 
 # ---------- runtime ----------
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 # curl is only for the Docker healthcheck.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \
@@ -28,3 +28,14 @@ RUN mkdir -p /data/photos && chown app:app /data/photos
 USER app
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "ShaadiLens.Api.dll"]
+
+# ---------- reel worker = api + ffmpeg ----------
+# Same app, but run with Processing__VideoWorkers=1 (and the other pools at 0) it only renders reels.
+# A separate image keeps ffmpeg (~400 MB of libraries) out of the api image.
+# Build: docker compose builds it as service "reel-worker" (target: reel).
+FROM runtime AS reel
+USER root
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+USER app

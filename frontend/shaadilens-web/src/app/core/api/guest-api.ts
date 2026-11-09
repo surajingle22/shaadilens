@@ -86,6 +86,30 @@ export interface RegisterForm {
   selfie?: Blob | null;
 }
 
+export type ReelStatus = 'Queued' | 'Rendering' | 'Ready' | 'Failed' | 'Replaced';
+
+export interface Reel {
+  id: string;
+  status: ReelStatus;
+  photoCount: number;
+  durationSeconds: number;
+  sizeBytes: number;
+  url: string | null;
+  downloadUrl: string | null;
+  createdAt: string;
+  error: string | null;
+}
+
+/** Can the guest make a reel now (and why not), plus their latest reel. */
+export interface ReelState {
+  enabled: boolean;
+  available: boolean;
+  reason: string | null;
+  photosAvailable: number;
+  remainingToday: number;
+  latest: Reel | null;
+}
+
 /** Guest endpoints. The guest JWT is added by the auth interceptor for /api/v1/public/*. */
 @Injectable({ providedIn: 'root' })
 export class GuestApi {
@@ -125,6 +149,9 @@ export class GuestApi {
     return firstValueFrom(this.http.post<MatchSummary>(`${this.base}/me/selfie`, body));
   }
   deleteMe = () => firstValueFrom(this.http.delete<void>(`${this.base}/me`));
+
+  reel = () => firstValueFrom(this.http.get<ReelState>(`${this.base}/me/reel`));
+  makeReel = () => firstValueFrom(this.http.post<Reel>(`${this.base}/me/reel`, {}));
 
   // ---------- Selection links (album picks) ----------
   selection = () => firstValueFrom(this.http.get<SelectionState>(`${this.base}/selections`));

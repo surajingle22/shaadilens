@@ -232,6 +232,24 @@ pipeline is now `Uploaded → Resized → FacesDetected → Matched`.
 - API: `GET events/{id}/photos?filter=Blurry|EyesClosed|Duplicates|Highlights|Hidden`, `GET …/photos/culling`,
   `POST …/photos/analyze-quality`, `POST …/photos/hide-burst-extras`, `POST photos/{id}/keep-in-burst`.
 
+## 7f. Highlight reels (Phase 3b)
+
+```
+guest: POST /api/v1/public/me/reel ── ReelService: rules (Guest/VIP link, ≥ 3 photos, 1 at a time, 3 per 24 h)
+        │                                 + ReelPlanner.Pick → Reel row (Queued, plan as JSON)
+        ▼  Hangfire queue "video"
+reel-worker container (same image as api + ffmpeg; Processing__VideoWorkers=1, other pools 0)
+   ReelJobs.RenderAsync → FfmpegReelRenderer (frames → ffmpeg) → events/{e}/selfies/{guest}/reel-{id}.mp4
+        │  queues ReelJobs.AnnounceAsync on "default" (the worker has no SignalR clients)
+        ▼
+api → SignalR "ReelUpdated" → guest's reel card reloads (also polls every 5 s while rendering)
+```
+- The MP4 lives in the guest's own folder, so deleting the guest or the expiry purge removes it. Older reels are
+  deleted when a new one is ready (rows stay as `Replaced` for the daily limit).
+- Served by `MediaController` as `PhotoVariant.Reel` (signed URL, range requests, `?download=1`).
+- Settings shows the music tracks and whether a Hangfire server on queue `video` is alive.
+- `backend/Dockerfile` stages: `runtime` (api) and `reel` (runtime + ffmpeg, ~580 MB more).
+
 ## 8. Configuration
 
 All secrets via `.env` → environment variables → ASP.NET Core configuration

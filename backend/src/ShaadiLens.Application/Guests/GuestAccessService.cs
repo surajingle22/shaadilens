@@ -391,6 +391,9 @@ public sealed class GuestAccessService(
     }
 
     /// <summary>Re-checks on every request: the admin may have closed the link or the guest deleted their data.</summary>
+    public Task<(ShareLink Link, Event Event, Guest? Guest)> ValidateSessionAsync(GuestContext ctx, CancellationToken ct) =>
+        OpenSessionAsync(ctx, ct);
+
     private async Task<(ShareLink Link, Event Event, Guest? Guest)> OpenSessionAsync(GuestContext ctx, CancellationToken ct)
     {
         var link = await db.ShareLinks.AsNoTracking().Include(l => l.Event)

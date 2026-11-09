@@ -14,9 +14,11 @@ namespace ShaadiLens.Api.Controllers;
 
 public sealed record SmtpStatus(bool Configured, string? Host, int Port, string? From);
 public sealed record PushStatus(bool Configured, string? PublicKey, string Subject);
+/// <param name="WorkerOnline">A Hangfire server listening on the "video" queue is running (the reel-worker container).</param>
+public sealed record ReelsStatus(string MusicFolder, IReadOnlyList<string> Tracks, bool WorkerOnline);
 public sealed record SettingsDto(
     string PublicBaseUrl, string StorageRoot, string FaceServiceUrl, int FaceWorkers, int ImageWorkers,
-    SmtpStatus Smtp, PushStatus Push);
+    SmtpStatus Smtp, PushStatus Push, ReelsStatus Reels);
 public sealed record TestEmailRequest(string To);
 public sealed record VapidKeysResponse(string PublicKey, string PrivateKey, string EnvLines);
 
@@ -30,14 +32,16 @@ public sealed record VapidKeysResponse(string PublicKey, string PrivateKey, stri
 public sealed class SettingsController(
     IOptions<AppOptions> app, IOptions<StorageOptions> storage, IOptions<FaceServiceOptions> face,
     IOptions<ProcessingOptions> processing, IOptions<SmtpOptions> smtp, IOptions<PushOptions> push,
-    IEmailSender email, IPushSender pushSender) : ControllerBase
+    IEmailSender email, IPushSender pushSender, ShaadiLens.Infrastructure.Reels.MusicLibrary music, Hangfire.JobStorage jobStorage) : ControllerBase
 {
     [HttpGet]
     public SettingsDto Get() => new(
         app.Value.PublicBaseUrl, storage.Value.Root, face.Value.BaseUrl,
         processing.Value.FaceWorkers, processing.Value.ImageWorkers,
         new SmtpStatus(email.IsConfigured, smtp.Value.Host, smtp.Value.Port, smtp.Value.From ?? smtp.Value.User),
-        new PushStatus(pushSender.IsConfigured, pushSender.PublicKey, push.Value.Subject));
+        new PushStatus(pushSender.IsConfigured, pushSender.PublicKey, push.Value.Subject),
+        new ReelsStatus(music.Folder, music.Tracks().Select(Path.GetFileName).OfType<string>().ToList(),
+            jobStorage.GetMonitoringApi().Servers().Any(s => s.Queues.Contains("video"))));
 
     /// <summary>Sends a test email so you know Gmail/SMTP settings work before the wedding.</summary>
     [HttpPost("test-email")]

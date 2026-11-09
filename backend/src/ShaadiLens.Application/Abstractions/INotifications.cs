@@ -13,6 +13,9 @@ public interface IRealtimeNotifier
 
     /// <summary>"3 new photos of you" banner for a guest who has the gallery open.</summary>
     Task NewMatchesAsync(Guid guestId, int count, CancellationToken ct = default);
+
+    /// <summary>The guest's highlight reel changed state (rendering / ready / failed).</summary>
+    Task ReelUpdatedAsync(Guid guestId, Guid reelId, Domain.Entities.ReelStatus status, CancellationToken ct = default);
 }
 
 /// <summary>

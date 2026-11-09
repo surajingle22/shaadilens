@@ -17,7 +17,7 @@ public sealed record UrlResponse(string Url);
 [ApiController]
 [Route("api/v1/public")]
 [Authorize(Policy = AuthConstants.GuestPolicy)]
-public sealed class GuestMeController(GuestAccessService guests, TokenService tokens) : ControllerBase
+public sealed class GuestMeController(GuestAccessService guests, TokenService tokens, Application.Reels.ReelService reels) : ControllerBase
 {
     private const string ZipTicketPurpose = "zip";
 
@@ -30,6 +30,15 @@ public sealed class GuestMeController(GuestAccessService guests, TokenService to
     [HttpGet("me/photos")]
     public Task<PagedResult<GuestPhotoDto>> MyPhotos([FromQuery] Guid? collectionId, [FromQuery] int page = 1, [FromQuery] int pageSize = 60, CancellationToken ct = default) =>
         guests.GetMyPhotosAsync(Ctx, collectionId, page, pageSize, ct);
+
+    /// <summary>Highlight reel: can I make one, and the latest one (status + signed video URL when ready).</summary>
+    [HttpGet("me/reel")]
+    public Task<Application.Reels.ReelStateDto> Reel(CancellationToken ct) => reels.GetAsync(Ctx, ct);
+
+    /// <summary>"Make my reel": picks the photos now, renders in the background (~1 minute).</summary>
+    [HttpPost("me/reel")]
+    public async Task<IActionResult> MakeReel(CancellationToken ct) =>
+        Accepted(await reels.CreateAsync(Ctx, ct));
 
     /// <summary>"Might be you?" strip.</summary>
     [HttpGet("me/probable")]

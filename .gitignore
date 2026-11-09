@@ -21,6 +21,9 @@ __pycache__/
 
 # Local data
 data/
+# Background music for reels: you choose and license the tracks, they are never committed
+music/*
+!music/README.md
 *.log
 
 # IDE / OS

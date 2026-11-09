@@ -129,6 +129,12 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("PurgedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("ReelPhotoCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("ReelsEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -506,6 +512,59 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.ToTable("Photos");
                 });
 
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.Reel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<float>("DurationSeconds")
+                        .HasColumnType("real");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("GuestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PhotoCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StorageKey")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("GuestId", "CreatedAt");
+
+                    b.ToTable("Reels");
+                });
+
             modelBuilder.Entity("ShaadiLens.Domain.Entities.Selection", b =>
                 {
                     b.Property<Guid>("Id")
@@ -800,6 +859,21 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Collection");
+                });
+
+            modelBuilder.Entity("ShaadiLens.Domain.Entities.Reel", b =>
+                {
+                    b.HasOne("ShaadiLens.Domain.Entities.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShaadiLens.Domain.Entities.Guest", null)
+                        .WithMany()
+                        .HasForeignKey("GuestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShaadiLens.Domain.Entities.Selection", b =>

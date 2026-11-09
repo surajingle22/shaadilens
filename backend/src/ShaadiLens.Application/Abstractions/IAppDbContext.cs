@@ -22,6 +22,7 @@ public interface IAppDbContext
     DbSet<Selection> Selections { get; }
     DbSet<SelectionSubmission> SelectionSubmissions { get; }
     DbSet<PersonCluster> PersonClusters { get; }
+    DbSet<Reel> Reels { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

@@ -271,6 +271,9 @@ public sealed class HangfirePhotoPipelineScheduler(IBackgroundJobClient jobs) : 
     public void EnqueueQualityAnalysis(Guid photoId) =>
         jobs.Enqueue<PhotoJobs>(j => j.AnalyzeQualityAsync(photoId, CancellationToken.None));
 
+    public void EnqueueReel(Guid reelId) =>
+        jobs.Enqueue<Reels.ReelJobs>(j => j.RenderAsync(reelId, CancellationToken.None));
+
     public void EnqueueClustering(Guid eventId, float eps, int minSamples) =>
         jobs.Enqueue<ClusterJobs>(j => j.RunAsync(eventId, eps, minSamples, CancellationToken.None));
 

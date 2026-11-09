@@ -55,6 +55,8 @@ public enum PhotoVariant
     Thumb = 0,
     Web = 1,
     Original = 2,
+    /// <summary>A guest's highlight reel (MP4). The id in the URL is the reel id, not a photo id.</summary>
+    Reel = 3,
 }
 
 public static class ShareLinkTypeRules

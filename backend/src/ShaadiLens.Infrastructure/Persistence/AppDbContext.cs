@@ -22,6 +22,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Selection> Selections => Set<Selection>();
     public DbSet<SelectionSubmission> SelectionSubmissions => Set<SelectionSubmission>();
     public DbSet<PersonCluster> PersonClusters => Set<PersonCluster>();
+    public DbSet<Reel> Reels => Set<Reel>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -87,6 +88,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Embedding).HasColumnType($"vector({EmbeddingDimensions})");
             e.Property(x => x.ImageKey).HasMaxLength(300);
             e.HasIndex(x => x.Embedding).HasMethod("hnsw").HasOperators("vector_cosine_ops");
+        });
+
+        b.Entity<Reel>(e =>
+        {
+            e.Property(x => x.PlanJson).HasColumnType("jsonb");
+            e.Property(x => x.Error).HasMaxLength(500);
+            e.HasIndex(x => new { x.GuestId, x.CreatedAt });
+            e.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Guest>().WithMany().HasForeignKey(x => x.GuestId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<PersonCluster>(e =>

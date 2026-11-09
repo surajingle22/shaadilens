@@ -46,6 +46,14 @@ public sealed class EventsController(EventService events, PhotoService photos) :
     [HttpGet("{id:guid}/stats")]
     public Task<EventStatsDto> Stats(Guid id, CancellationToken ct) => events.GetStatsAsync(id, ct);
 
+    /// <summary>Guest highlight reels on/off and photos per reel.</summary>
+    [HttpPut("{id:guid}/reel-settings")]
+    public async Task<IActionResult> ReelSettings(Guid id, Application.Reels.ReelSettingsDto req, CancellationToken ct)
+    {
+        await events.UpdateReelSettingsAsync(id, req, ct);
+        return NoContent();
+    }
+
     [HttpPut("{id:guid}/face-settings")]
     public async Task<IActionResult> FaceSettings(Guid id, FaceSettingsDto req, CancellationToken ct)
     {

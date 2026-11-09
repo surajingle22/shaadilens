@@ -29,6 +29,11 @@ public class Event
     public DateTimeOffset? ClusteringStartedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Guests can make a highlight reel (video) of their photos.</summary>
+    public bool ReelsEnabled { get; set; } = true;
+    /// <summary>Photos per reel (about 2.4 s each).</summary>
+    public int ReelPhotoCount { get; set; } = 12;
+
     /// <summary>Guests can open links: published and not expired.</summary>
     public bool IsOpen(DateTimeOffset now) => IsPublished && (ExpiresAt is null || ExpiresAt > now);
 

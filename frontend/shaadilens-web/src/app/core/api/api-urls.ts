@@ -18,6 +18,7 @@ export const API = {
   publish: (id: string) => `${v1}/events/${id}/publish`,
   stats: (id: string) => `${v1}/events/${id}/stats`,
   faceSettings: (id: string) => `${v1}/events/${id}/face-settings`,
+  reelSettings: (id: string) => `${v1}/events/${id}/reel-settings`,
   cover: (id: string) => `${v1}/events/${id}/cover`,
   collections: (id: string) => `${v1}/events/${id}/collections`,
   collection: (eventId: string, id: string) => `${v1}/events/${eventId}/collections/${id}`,

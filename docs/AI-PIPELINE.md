@@ -261,6 +261,23 @@ Photos processed before 3a are filled in by **Analyze them** (Photos tab): it ca
 updates the culling fields — faces, matches and People groups stay as they are (stored faces are paired with the new
 detections by box overlap to copy the eye ratio).
 
+## 4h. Highlight reels — picking photos for a guest's video (Phase 3b)
+
+No new model here either: a reel reuses what matching and culling already know about each of the guest's photos
+(`Application/Reels/ReelPlanner.cs`, plain C#, unit-tested).
+
+1. **Score** each of the guest's photos (Auto + Confirmed matches) by *their own* face in it:
+   `log(1 + face size) × min(1, sharpness / 150) × (0.3 if their eyes are closed) × 1.15 if they confirmed it
+   × 1.2 if the admin marked it a highlight`. A big face means they're the subject, not someone in the background.
+2. **One per burst** (§4g): five near-identical frames make a boring video.
+3. **Spread over collections** (Haldi, Sangeet, Wedding…): round-robin, best first, up to `ReelPhotoCount` (12).
+4. Play them **in the order they were taken**.
+
+The video crop is the AI-ish touch: every photo is cut to 9:16 **around the guest's face** (the matched face's
+box), so a wide group photo becomes a portrait of *them*, and the slow Ken Burns zoom moves towards their face.
+Rendering: Magick.NET cuts the frames and draws the title/watermark PNGs; ffmpeg does `zoompan` (zoom),
+`xfade` (cross-fades), `overlay`, music `atrim`/`afade`, H.264 + AAC, `+faststart` (see `Infrastructure/Reels`).
+
 ## 5. Where it lives
 
 - `Face.Embedding vector(512)` and `GuestReference.Embedding vector(512)` in Postgres.

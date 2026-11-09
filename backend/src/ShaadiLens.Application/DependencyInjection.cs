@@ -17,6 +17,7 @@ public static class DependencyInjection
         services.Configure<UploadOptions>(config.GetSection(UploadOptions.Section));
         services.Configure<AppOptions>(config.GetSection(AppOptions.Section));
         services.Configure<CullingOptions>(config.GetSection(CullingOptions.Section));
+        services.Configure<Reels.ReelOptions>(config.GetSection(Reels.ReelOptions.Section));
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         // Use-case services: one per request (scoped), like the DbContext they use.
@@ -29,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<SelectionService>();
         services.AddScoped<People.PeopleService>();
         services.AddScoped<GuestAdminService>();
+        services.AddScoped<Reels.ReelService>();
         return services;
     }
 }

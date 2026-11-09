@@ -31,4 +31,6 @@ public static class StorageKeys
     public static string UploadChunk(Guid uploadId, int index) => $"{UploadFolder(uploadId)}/{index:D5}.part";
     public static string Selfie(Guid eventId, Guid guestId, Guid selfieId) => $"events/{eventId}/selfies/{guestId}/{selfieId}.jpg";
     public static string GuestFolder(Guid eventId, Guid guestId) => $"events/{eventId}/selfies/{guestId}";
+    /// <summary>Reels live in the guest's own folder: deleting the guest or the expiry purge removes them too.</summary>
+    public static string Reel(Guid eventId, Guid guestId, Guid reelId) => $"{GuestFolder(eventId, guestId)}/reel-{reelId}.mp4";
 }

@@ -18,6 +18,9 @@ public interface IPhotoPipelineScheduler
     /// <summary>Compute only the culling fields (blur, eyes, near-duplicates) for an already-processed photo.</summary>
     void EnqueueQualityAnalysis(Guid photoId);
 
+    /// <summary>Render a guest's highlight reel (queue "video", run by the reel worker).</summary>
+    void EnqueueReel(Guid reelId);
+
     /// <summary>Queue a fresh search for every guest of the event (e.g. after the admin changed thresholds).</summary>
     void EnqueueRematchEvent(Guid eventId);
 

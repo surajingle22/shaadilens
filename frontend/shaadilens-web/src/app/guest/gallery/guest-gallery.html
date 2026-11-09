@@ -43,6 +43,7 @@
 
 @if (!isFull() && session().hasSelfie) {
   <app-notify-card [initial]="session().notifications" />
+  <app-reel-card [tick]="reelTick()" />
 }
 
 @if (newPhotos() > 0) {

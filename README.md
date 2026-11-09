@@ -6,7 +6,7 @@ Runs entirely on one machine with Docker Compose — no paid APIs, no cloud AI.
 > **Privacy note:** face embeddings are biometric data. This app is meant for a private family event:
 > guests give explicit consent, can delete their data at any time, and data is purged when the event expires.
 
-**Status:** Phase 3 in progress — 3a culling report done (blurry / eyes closed / near-duplicates). Phase 2 complete — live matching, feedback, notifications, couple features, people, TV, hot folder.
+**Status:** Phase 3 in progress — 3a culling report, 3b guest highlight reels (ffmpeg) done. Phase 2 complete — live matching, feedback, notifications, couple features, people, TV, hot folder.
 See [docs/SPEC.md](docs/SPEC.md) §12.
 
 ## What it does
@@ -21,7 +21,7 @@ See [docs/SPEC.md](docs/SPEC.md) §12.
 .NET 10 · EF Core + PostgreSQL 16 + pgvector · Hangfire · Magick.NET · Python FastAPI + InsightFace (`buffalo_l`, CPU) · Angular 22 + Material · nginx · Docker Compose
 
 ## Prerequisites
-- Docker Desktop (WSL 2 backend on Windows), ~4 GB free disk
+- Docker Desktop (WSL 2 backend on Windows), ~6 GB free disk (images incl. ffmpeg for reels) + space for photos
 - Optional for local dev outside Docker: .NET 10 SDK, Node 24 LTS (Angular 22 needs Node ≥ 22.22 or ≥ 24.15)
 
 ## Quick start
@@ -30,6 +30,7 @@ See [docs/SPEC.md](docs/SPEC.md) §12.
 copy .env.example .env      # then edit POSTGRES_PASSWORD (and later the other secrets)
 docker compose up --build   # first build: ~5–10 min (downloads the ~280 MB face model once)
 ```
+Optional: put royalty-free music for guest highlight reels in `music/` (see `music/README.md`).
 
 | URL | What |
 |---|---|

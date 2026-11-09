@@ -182,6 +182,22 @@
     </div>
   </form>
 
+  <!-- ---------- highlight reels ---------- -->
+  <form class="panel" [formGroup]="reels" (ngSubmit)="saveReelSettings()">
+    <h2>Highlight reels</h2>
+    <p class="muted small">
+      Guests can tap <strong>Make my reel</strong> to get a ~30 s portrait video (WhatsApp / Instagram) of their best photos,
+      cropped around their face, with music from the <code>music</code> folder. Rendered by the reel worker: about 2 minutes each on 2 cores (REEL_CPUS).
+    </p>
+    <div class="inline">
+      <mat-slide-toggle formControlName="enabled">Guests can make reels</mat-slide-toggle>
+      <mat-form-field appearance="outline"><mat-label>Photos per reel</mat-label>
+        <input matInput type="number" min="3" max="30" formControlName="photoCount" />
+        <mat-hint>3–30 · about 2.4 s each</mat-hint></mat-form-field>
+      <button mat-stroked-button type="submit" [disabled]="reels.invalid || reels.pristine || saving()">Save</button>
+    </div>
+  </form>
+
   <section class="panel danger">
     <h2>Danger zone</h2>
     <button mat-stroked-button color="warn" (click)="deleteEvent()"><mat-icon>delete_forever</mat-icon> Delete event</button>

@@ -40,10 +40,12 @@ services:
       start_period: 60s                     # model load takes a while on CPU
 
   api:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime                       # the last stage (reel) adds ffmpeg; the api doesn't need it
     image: shaadilens/api:dev
     restart: unless-stopped
-    environment:
+    environment: &api-environment
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}   # Development = Swagger on
       ASPNETCORE_HTTP_PORTS: "8080"
       ConnectionStrings__Default: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-shaadilens};Username=${POSTGRES_USER:-shaadilens};Password=${POSTGRES_PASSWORD}"
@@ -65,6 +67,7 @@ services:
       Push__PrivateKey: ${VAPID_PRIVATE:-}
       Push__Subject: ${VAPID_SUBJECT:-mailto:admin@example.com}
       Uploader__ApiKey: ${UPLOADER_API_KEY:-}
+      Processing__VideoWorkers: "0"           # reels are rendered by reel-worker, not here
     volumes:
       - photos:/data/photos
     depends_on:
@@ -75,6 +78,33 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
       interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Renders guests' highlight reels with ffmpeg (Hangfire queue "video"). Same app as the api + ffmpeg, but only
+  # the video worker pool runs. CPU-heavy (~1 min per reel), so it is capped with REEL_CPUS.
+  reel-worker:
+    build:
+      context: ./backend
+      target: reel
+    image: shaadilens/reel-worker:dev
+    restart: unless-stopped
+    environment:
+      <<: *api-environment
+      Processing__ImageWorkers: "0"
+      Processing__FaceWorkers: "0"
+      Processing__VideoWorkers: "1"
+    volumes:
+      - photos:/data/photos
+      - ./music:/data/music:ro             # your royalty-free tracks (see music/README.md)
+    cpus: ${REEL_CPUS:-2}
+    depends_on:
+      api:
+        condition: service_healthy          # the api applies database migrations first
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/live"]
+      interval: 15s
       timeout: 5s
       retries: 10
       start_period: 20s

@@ -43,6 +43,7 @@ public sealed class ApiFactory(PostgresFixture pg) : WebApplicationFactory<Progr
     public RecordingScheduler Scheduler { get; } = new();
     public FakePushSender Push { get; } = new();
     public FakeEmailSender Email { get; } = new();
+    public FakeReelRenderer Reels { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -67,6 +68,8 @@ public sealed class ApiFactory(PostgresFixture pg) : WebApplicationFactory<Progr
             s.AddSingleton<IPushSender>(Push);
             s.RemoveAll<IEmailSender>();
             s.AddSingleton<IEmailSender>(Email);
+            s.RemoveAll<ShaadiLens.Infrastructure.Reels.IReelRenderer>();
+            s.AddSingleton<ShaadiLens.Infrastructure.Reels.IReelRenderer>(Reels);
         });
     }
 
@@ -174,5 +177,23 @@ public sealed class RecordingScheduler : IPhotoPipelineScheduler
     public void EnqueueClustering(Guid eventId, float eps, int minSamples) => Add(Clustering, eventId);
     public List<Guid> Quality { get; } = [];
     public void EnqueueQualityAnalysis(Guid photoId) => Add(Quality, photoId);
+    public List<Guid> Reels { get; } = [];
+    public void EnqueueReel(Guid reelId) => Add(Reels, reelId);
     public void EnqueueRematchEvent(Guid eventId) => Add(Rematch, eventId);
+}
+
+/// <summary>No ffmpeg in the test container: writes a few fake bytes and remembers what it was asked to render.</summary>
+public sealed class FakeReelRenderer : ShaadiLens.Infrastructure.Reels.IReelRenderer
+{
+    public List<ShaadiLens.Infrastructure.Reels.ReelRenderRequest> Requests { get; } = [];
+    public bool Fail { get; set; }
+
+    public Task RenderAsync(ShaadiLens.Infrastructure.Reels.ReelRenderRequest request, CancellationToken ct)
+    {
+        Requests.Add(request);
+        if (Fail) throw new InvalidOperationException("ffmpeg failed (1): boom");
+        Directory.CreateDirectory(Path.GetDirectoryName(request.OutputPath)!);
+        File.WriteAllBytes(request.OutputPath, "fake mp4 bytes"u8.ToArray());
+        return Task.CompletedTask;
+    }
 }

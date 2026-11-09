@@ -59,6 +59,9 @@ public sealed class SignalRRealtimeNotifier(IHubContext<EventsHub> hub, ILogger<
     public Task NewMatchesAsync(Guid guestId, int count, CancellationToken ct = default) =>
         SafeAsync(() => hub.Clients.Group(EventsHub.GuestGroup(guestId)).SendAsync("NewMatchesForYou", new { count }, ct));
 
+    public Task ReelUpdatedAsync(Guid guestId, Guid reelId, Domain.Entities.ReelStatus status, CancellationToken ct = default) =>
+        SafeAsync(() => hub.Clients.Group(EventsHub.GuestGroup(guestId)).SendAsync("ReelUpdated", new { reelId, status }, ct));
+
     /// <summary>Live updates are a nice-to-have: never let them fail a photo job.</summary>
     private async Task SafeAsync(Func<Task> send)
     {
