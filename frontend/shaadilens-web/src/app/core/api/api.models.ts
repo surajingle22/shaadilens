@@ -119,6 +119,26 @@ export interface Photo {
   error: string | null;
   thumbUrl: string | null;
   webUrl: string | null;
+  // Culling report (Phase 3)
+  analysed: boolean;
+  isBlurry: boolean;
+  closedEyes: number;
+  burstGroupId: string | null;
+  isBurstBest: boolean;
+}
+
+export type PhotoFilter = 'All' | 'Blurry' | 'EyesClosed' | 'Duplicates' | 'Highlights' | 'Hidden';
+
+/** Counts for the culling filter chips. burstExtras = photos that could be hidden (each burst minus its keeper). */
+export interface CullingSummary {
+  processed: number;
+  notAnalysed: number;
+  blurry: number;
+  eyesClosed: number;
+  burstGroups: number;
+  burstExtras: number;
+  highlights: number;
+  hidden: number;
 }
 
 export interface FaceBox {
@@ -131,6 +151,7 @@ export interface FaceBox {
   faceSizePx: number;
   yaw: number;
   quality: number;
+  eyeAspectRatio: number | null;
 }
 
 export interface PhotoDetail {

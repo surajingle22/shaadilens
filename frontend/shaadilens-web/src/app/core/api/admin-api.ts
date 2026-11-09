@@ -20,7 +20,9 @@ import {
   People,
   Photo,
   PhotoDetail,
+  PhotoFilter,
   PhotoStatus,
+  CullingSummary,
   PinResponse,
   SaveEventRequest,
   SaveShareLinkRequest,
@@ -58,8 +60,9 @@ export class AdminApi {
   reorderCollections = (eventId: string, ids: string[]) => this.put<void>(API.collectionsOrder(eventId), ids);
 
   // ---------- photos ----------
-  photos(eventId: string, q: { collectionId?: string | null; status?: PhotoStatus | null; page: number; pageSize: number }) {
+  photos(eventId: string, q: { collectionId?: string | null; status?: PhotoStatus | null; filter?: PhotoFilter; page: number; pageSize: number }) {
     let params = new HttpParams().set('page', q.page).set('pageSize', q.pageSize);
+    if (q.filter && q.filter !== 'All') params = params.set('filter', q.filter);
     if (q.collectionId) params = params.set('collectionId', q.collectionId);
     if (q.status) params = params.set('status', q.status);
     return firstValueFrom(this.http.get<PagedResult<Photo>>(API.eventPhotos(eventId), { params }));
@@ -69,6 +72,12 @@ export class AdminApi {
   deletePhoto = (id: string) => this.delete(API.photo(id));
   reprocess = (id: string) => this.post<void>(API.reprocess(id), {});
   retryFailed = (eventId: string) => this.post<{ queued: number }>(API.retryFailed(eventId), {});
+  culling = (eventId: string, collectionId: string | null) =>
+    firstValueFrom(this.http.get<CullingSummary>(API.culling(eventId), { params: collectionId ? { collectionId } : {} }));
+  analyzeQuality = (eventId: string) => this.post<{ queued: number }>(API.analyzeQuality(eventId), {});
+  hideBurstExtras = (eventId: string, collectionId: string | null) =>
+    firstValueFrom(this.http.post<{ hidden: number }>(API.hideBurstExtras(eventId), {}, { params: collectionId ? { collectionId } : {} }));
+  keepInBurst = (id: string) => this.post<void>(API.keepInBurst(id), {});
 
   // ---------- uploads (used by UploadQueue) ----------
   initUpload = (eventId: string, collectionId: string, file: File) =>

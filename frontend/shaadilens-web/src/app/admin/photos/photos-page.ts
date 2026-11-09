@@ -1,7 +1,9 @@
 import { Component, DestroyRef, ElementRef, afterNextRender, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -9,16 +11,17 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AdminApi } from '../../core/api/admin-api';
-import { Photo, PhotoStatus } from '../../core/api/api.models';
+import { CullingSummary, Photo, PhotoFilter, PhotoStatus } from '../../core/api/api.models';
 import { Notify } from '../../core/notify';
 import { EventContext } from '../event/event-context';
 import { PhotoDialog, PhotoDialogData } from './photo-dialog';
+import { groupBursts } from './bursts';
 
 const PAGE_SIZE = 60;
 
 @Component({
   selector: 'app-photos-page',
-  imports: [FormsModule, MatButtonModule, MatButtonToggleModule, MatFormFieldModule, MatIconModule, MatProgressBarModule, MatSelectModule, MatTooltipModule],
+  imports: [NgTemplateOutlet, FormsModule, MatButtonModule, MatButtonToggleModule, MatChipsModule, MatFormFieldModule, MatIconModule, MatProgressBarModule, MatSelectModule, MatTooltipModule],
   template: `
     <div class="filters">
       <mat-form-field appearance="outline">
@@ -39,30 +42,79 @@ const PAGE_SIZE = 60;
       <span class="muted">{{ total() }} photo(s)</span>
     </div>
 
+    <!-- Culling report: AI hints for what the photographer can skip. -->
+    <div class="culling">
+      <mat-chip-listbox [ngModel]="filter()" (ngModelChange)="filter.set($event ?? 'All')" aria-label="Culling filter">
+        <mat-chip-option value="All">All</mat-chip-option>
+        <mat-chip-option value="Blurry" matTooltip="The sharpest face (or, without people, the whole photo) is soft">
+          <mat-icon matChipAvatar>blur_on</mat-icon> Blurry · {{ summary()?.blurry ?? '…' }}</mat-chip-option>
+        <mat-chip-option value="EyesClosed" matTooltip="Someone in front has their eyes closed">
+          <mat-icon matChipAvatar>visibility_off</mat-icon> Eyes closed · {{ summary()?.eyesClosed ?? '…' }}</mat-chip-option>
+        <mat-chip-option value="Duplicates" matTooltip="Burst shots of the same moment — keep the best one">
+          <mat-icon matChipAvatar>burst_mode</mat-icon> Duplicates · {{ summary()?.burstExtras ?? '…' }}</mat-chip-option>
+        <mat-chip-option value="Highlights"><mat-icon matChipAvatar>star</mat-icon> Highlights · {{ summary()?.highlights ?? '…' }}</mat-chip-option>
+        <mat-chip-option value="Hidden"><mat-icon matChipAvatar>hide_image</mat-icon> Hidden · {{ summary()?.hidden ?? '…' }}</mat-chip-option>
+      </mat-chip-listbox>
+      @if (filter() === 'Duplicates' && summary()?.burstExtras) {
+        <button mat-flat-button (click)="hideExtras()"><mat-icon>auto_fix_high</mat-icon> Keep best, hide the rest</button>
+      }
+    </div>
+    @if (summary()?.notAnalysed; as n) {
+      <p class="panel info">
+        <mat-icon>auto_awesome</mat-icon>
+        {{ n }} photo(s) were processed before the culling report existed.
+        <button mat-button (click)="analyzeExisting()">Analyze them</button>
+      </p>
+    }
+
     @if (loading() && !photos().length) {
       <mat-progress-bar mode="indeterminate" />
     }
 
-    <div class="grid">
-      @for (p of photos(); track p.id) {
-        <button class="tile" (click)="open(p)" [class.hidden]="p.isHidden" [attr.aria-label]="p.fileName">
-          @if (p.thumbUrl) {
-            <img [src]="p.thumbUrl" [alt]="p.fileName" loading="lazy" />
-          } @else {
-            <div class="placeholder"><mat-icon>hourglass_top</mat-icon></div>
+    <ng-template #tile let-p>
+      <button class="tile" (click)="open(p)" [class.hidden]="p.isHidden" [class.keeper]="p.isBurstBest && filter() === 'Duplicates'" [attr.aria-label]="p.fileName">
+        @if (p.thumbUrl) {
+          <img [src]="p.thumbUrl" [alt]="p.fileName" loading="lazy" />
+        } @else {
+          <div class="placeholder"><mat-icon>hourglass_top</mat-icon></div>
+        }
+        <span class="badges">
+          @if (p.status === 'Failed') { <mat-icon class="bad" [matTooltip]="p.error ?? 'Failed'">error</mat-icon> }
+          @else if (p.status !== 'FacesDetected' && p.status !== 'Matched') { <mat-icon matTooltip="Processing">autorenew</mat-icon> }
+          @else { <span class="faces" matTooltip="Faces found"><mat-icon>face</mat-icon>{{ p.faceCount }}</span> }
+          @if (p.isHighlight) { <mat-icon matTooltip="Highlight">star</mat-icon> }
+          @if (p.isHidden) { <mat-icon matTooltip="Hidden from guests">visibility_off</mat-icon> }
+          @if (p.isBlurry) { <mat-icon matTooltip="Blurry">blur_on</mat-icon> }
+          @if (p.closedEyes) { <mat-icon matTooltip="Eyes closed">bedtime</mat-icon> }
+          @if (p.burstGroupId) { <mat-icon [matTooltip]="p.isBurstBest ? 'Best of its burst' : 'Near-duplicate'">{{ p.isBurstBest ? 'verified' : 'burst_mode' }}</mat-icon> }
+        </span>
+      </button>
+    </ng-template>
+
+    @if (filter() === 'Duplicates') {
+      <!-- One row per burst, keeper first. -->
+      @for (b of bursts(); track b.id) {
+        <section class="burst">
+          @for (p of b.photos; track p.id) {
+            <div class="burst-item">
+              <ng-container *ngTemplateOutlet="tile; context: { $implicit: p }" />
+              @if (p.isBurstBest) { <span class="keep-label"><mat-icon>verified</mat-icon> Keeper</span> }
+              @else { <button mat-button class="keep-label" (click)="keep(p)">Keep this one</button> }
+            </div>
           }
-          <span class="badges">
-            @if (p.status === 'Failed') { <mat-icon class="bad" [matTooltip]="p.error ?? 'Failed'">error</mat-icon> }
-            @else if (p.status !== 'FacesDetected' && p.status !== 'Matched') { <mat-icon matTooltip="Processing">autorenew</mat-icon> }
-            @else { <span class="faces" matTooltip="Faces found"><mat-icon>face</mat-icon>{{ p.faceCount }}</span> }
-            @if (p.isHighlight) { <mat-icon matTooltip="Highlight">star</mat-icon> }
-            @if (p.isHidden) { <mat-icon matTooltip="Hidden from guests">visibility_off</mat-icon> }
-          </span>
-        </button>
+        </section>
       } @empty {
-        @if (!loading()) { <p class="muted">No photos match these filters.</p> }
+        @if (!loading()) { <p class="muted">No near-duplicates found.</p> }
       }
-    </div>
+    } @else {
+      <div class="grid">
+        @for (p of photos(); track p.id) {
+          <ng-container *ngTemplateOutlet="tile; context: { $implicit: p }" />
+        } @empty {
+          @if (!loading()) { <p class="muted">No photos match these filters.</p> }
+        }
+      </div>
+    }
 
     <!-- Infinite scroll: when this comes into view, load the next page. -->
     <div #sentinel class="sentinel">
@@ -84,6 +136,15 @@ const PAGE_SIZE = 60;
     .faces { display: inline-flex; align-items: center; gap: 2px; }
     .bad { color: #ff8a80; }
     .sentinel { height: 40px; }
+    .culling { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+    .panel.info { display: flex; align-items: center; gap: 8px; }
+    .burst { display: flex; gap: 8px; overflow-x: auto; padding: 8px; margin-bottom: 10px; border-radius: 10px;
+      background: var(--mat-sys-surface-container-low); }
+    .burst-item { flex: 0 0 160px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .burst-item .tile { width: 160px; }
+    .tile.keeper { outline: 3px solid var(--mat-sys-primary); }
+    .keep-label { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; min-height: 36px; }
+    .keep-label mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--mat-sys-primary); }
   `,
 })
 export class PhotosPage {
@@ -94,7 +155,11 @@ export class PhotosPage {
 
   protected readonly collectionId = signal<string | null>(null);
   protected readonly status = signal<PhotoStatus | null>(null);
+  protected readonly filter = signal<PhotoFilter>('All');
+  protected readonly summary = signal<CullingSummary | null>(null);
   protected readonly photos = signal<Photo[]>([]);
+  /** Duplicates view: one row per burst. */
+  protected readonly bursts = computed(() => groupBursts(this.photos()));
   protected readonly total = signal(0);
   protected readonly loading = signal(false);
   private page = 0;
@@ -108,7 +173,14 @@ export class PhotosPage {
       const eventId = this.ctx.eventId();
       this.collectionId();
       this.status();
+      this.filter();
       if (eventId) void this.reset();
+    });
+    // Chip counts depend on the event + collection only.
+    effect(() => {
+      const eventId = this.ctx.eventId();
+      const collectionId = this.collectionId();
+      if (eventId) untracked(() => void this.loadSummary(eventId, collectionId));
     });
 
     // Live: photos finished processing → refresh the grid (debounced), but only while the admin is still
@@ -117,7 +189,10 @@ export class PhotosPage {
     effect(() => {
       if (this.ctx.photoTick() === 0) return;
       clearTimeout(liveTimer);
-      liveTimer = setTimeout(() => untracked(() => { if (this.page <= 1 && !this.loading()) void this.reset(); }), 2000);
+      liveTimer = setTimeout(() => untracked(() => {
+        void this.refreshSummary();
+        if (this.page <= 1 && !this.loading()) void this.reset();
+      }), 2000);
     });
     inject(DestroyRef).onDestroy(() => clearTimeout(liveTimer));
 
@@ -145,7 +220,9 @@ export class PhotosPage {
     const gen = this.generation;
     this.loading.set(true);
     try {
-      const result = await this.api.photos(eventId, { collectionId: this.collectionId(), status: this.status(), page: this.page + 1, pageSize: PAGE_SIZE });
+      const result = await this.api.photos(eventId, {
+        collectionId: this.collectionId(), status: this.status(), filter: this.filter(), page: this.page + 1, pageSize: PAGE_SIZE,
+      });
       if (gen !== this.generation) return; // filters changed meanwhile
       this.page = result.page;
       this.total.set(result.total);
@@ -157,6 +234,52 @@ export class PhotosPage {
     }
   }
 
+  private async loadSummary(eventId: string, collectionId: string | null): Promise<void> {
+    try {
+      this.summary.set(await this.api.culling(eventId, collectionId));
+    } catch {
+      this.summary.set(null); // chips just show "…"
+    }
+  }
+
+  private refreshSummary(): Promise<void> {
+    const eventId = this.ctx.eventId();
+    return eventId ? this.loadSummary(eventId, this.collectionId()) : Promise.resolve();
+  }
+
+  protected async analyzeExisting(): Promise<void> {
+    try {
+      const { queued } = await this.api.analyzeQuality(this.ctx.eventId()!);
+      this.notify.ok(`Analyzing ${queued} photo(s) in the background — the counts update as they finish.`);
+    } catch (err) {
+      this.notify.error(err);
+    }
+  }
+
+  protected async hideExtras(): Promise<void> {
+    const n = this.summary()?.burstExtras ?? 0;
+    if (!confirm(`Hide ${n} near-duplicate photo(s) from guests and keep only the best of each burst? You can show them again any time.`)) return;
+    try {
+      const { hidden } = await this.api.hideBurstExtras(this.ctx.eventId()!, this.collectionId());
+      this.notify.ok(`${hidden} photo(s) hidden`);
+      await this.refreshSummary();
+      await this.reset();
+    } catch (err) {
+      this.notify.error(err);
+    }
+  }
+
+  protected async keep(photo: Photo): Promise<void> {
+    try {
+      await this.api.keepInBurst(photo.id);
+      // Update in place: this one becomes the keeper of its burst.
+      this.photos.update((list) => list.map((p) => p.burstGroupId === photo.burstGroupId
+        ? { ...p, isBurstBest: p.id === photo.id, isHidden: p.id === photo.id ? false : p.isHidden } : p));
+    } catch (err) {
+      this.notify.error(err);
+    }
+  }
+
   protected open(photo: Photo): void {
     const data: PhotoDialogData = { photoId: photo.id, event: this.ctx.event.value()! };
     this.dialog.open(PhotoDialog, { data, maxWidth: '96vw', width: '1100px', autoFocus: false })
@@ -164,6 +287,7 @@ export class PhotosPage {
       .subscribe((changed: boolean | undefined) => {
         if (changed) {
           this.ctx.reload();
+          void this.refreshSummary();
           void this.reset();
         }
       });

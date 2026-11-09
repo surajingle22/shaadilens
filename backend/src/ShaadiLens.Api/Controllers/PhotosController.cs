@@ -29,6 +29,14 @@ public sealed class PhotosController(PhotoService photos) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Make this frame the keeper of its burst (near-duplicate group).</summary>
+    [HttpPost("{id:guid}/keep-in-burst")]
+    public async Task<IActionResult> KeepInBurst(Guid id, CancellationToken ct)
+    {
+        await photos.KeepInBurstAsync(id, ct);
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/reprocess")]
     public async Task<IActionResult> Reprocess(Guid id, CancellationToken ct)
     {

@@ -131,3 +131,11 @@ guest × photo similarities; real matches pile up on the right). Raise **Match**
 "Your photos"; lower **Probable** if people miss photos. **Save**, then **Apply to all guests** (background job,
 usually < 1 min). New uploads always use the saved values. Per guest: Guests → ✔ icon = Match Review
 (approve/reject faces; approving adds the face as a reference for "Find more").
+
+## Culling report (which photos to skip)
+Photos tab → chips **Blurry · Eyes closed · Duplicates**. Duplicates shows one row per burst with its keeper
+outlined; **Keep this one** changes the keeper, **Keep best, hide the rest** hides the others from guests (undo:
+Hidden chip → open → Show to guests). Events uploaded before this feature: click **Analyze them** once.
+Thresholds (rarely needed) in `.env`, e.g. `Culling__BlurryFaceBelow=60`, `Culling__ClosedEyesBelow=0.17`,
+`Culling__DuplicateMaxBits=10`, `Culling__BurstWindowSeconds=60`, then `docker compose up -d api` and re-run
+face detection / Analyze. See docs/AI-PIPELINE.md §4g for what they mean.

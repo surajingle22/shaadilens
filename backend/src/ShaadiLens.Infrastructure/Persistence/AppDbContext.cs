@@ -51,6 +51,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.ContentHash).HasMaxLength(64);
             e.HasIndex(x => new { x.EventId, x.Status });
             e.HasIndex(x => new { x.EventId, x.CollectionId });
+            e.HasIndex(x => new { x.CollectionId, x.TakenAt }); // burst grouping: "photos taken around the same time"
+            e.HasIndex(x => x.BurstGroupId);
             // Same file can't be uploaded twice into one event.
             e.HasIndex(x => new { x.EventId, x.ContentHash }).IsUnique();
             e.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Cascade);

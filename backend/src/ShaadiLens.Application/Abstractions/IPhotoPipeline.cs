@@ -15,6 +15,9 @@ public interface IPhotoPipelineScheduler
     /// <summary>Re-render web + thumb from the original (watermark changed). Faces stay.</summary>
     void EnqueueImageRebuild(Guid photoId);
 
+    /// <summary>Compute only the culling fields (blur, eyes, near-duplicates) for an already-processed photo.</summary>
+    void EnqueueQualityAnalysis(Guid photoId);
+
     /// <summary>Queue a fresh search for every guest of the event (e.g. after the admin changed thresholds).</summary>
     void EnqueueRematchEvent(Guid eventId);
 

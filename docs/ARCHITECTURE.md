@@ -222,6 +222,16 @@ pipeline is now `Uploaded → Resized → FacesDetected → Matched`.
   Auth: `X-Api-Key` = `UPLOADER_API_KEY` → role `Uploader`, accepted only by the `Upload` policy (upload endpoints +
   `GET /api/v1/uploader/targets`). Key compared in constant time; empty/short key = feature off.
 
+## 7e. Culling report (Phase 3a)
+
+- face-service `/v1/analyze` also returns `ear` per face and `sharpness` + `phash` per photo (`app/quality.py`).
+- `PhotoJobs.DetectFacesAsync` → `Culling.Apply` fills `Photo.BlurScore` (sharpest face), `Sharpness`,
+  `PerceptualHash`, `ClosedEyesCount`, `Face.EyeAspectRatio` → `BurstGrouper.AssignAsync` (advisory lock per
+  collection, transitive merge, `IsBurstBest` / `BurstPickedByAdmin`).
+- `PhotoJobs.AnalyzeQualityAsync` (queue `faces`) = backfill without touching faces.
+- API: `GET events/{id}/photos?filter=Blurry|EyesClosed|Duplicates|Highlights|Hidden`, `GET …/photos/culling`,
+  `POST …/photos/analyze-quality`, `POST …/photos/hide-burst-extras`, `POST photos/{id}/keep-in-burst`.
+
 ## 8. Configuration
 
 All secrets via `.env` → environment variables → ASP.NET Core configuration

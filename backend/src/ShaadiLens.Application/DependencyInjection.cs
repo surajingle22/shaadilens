@@ -16,6 +16,7 @@ public static class DependencyInjection
     {
         services.Configure<UploadOptions>(config.GetSection(UploadOptions.Section));
         services.Configure<AppOptions>(config.GetSection(AppOptions.Section));
+        services.Configure<CullingOptions>(config.GetSection(CullingOptions.Section));
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         // Use-case services: one per request (scoped), like the DbContext they use.

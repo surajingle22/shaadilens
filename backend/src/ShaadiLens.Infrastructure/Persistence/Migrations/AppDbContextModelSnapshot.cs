@@ -190,6 +190,9 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
 
+                    b.Property<float?>("EyeAspectRatio")
+                        .HasColumnType("real");
+
                     b.Property<float>("FaceSizePx")
                         .HasColumnType("real");
 
@@ -410,8 +413,17 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.Property<float?>("BlurScore")
                         .HasColumnType("real");
 
+                    b.Property<Guid?>("BurstGroupId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("BurstPickedByAdmin")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("CameraModel")
                         .HasColumnType("text");
+
+                    b.Property<int>("ClosedEyesCount")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("CollectionId")
                         .HasColumnType("uuid");
@@ -433,6 +445,9 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.Property<int>("Height")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("IsBurstBest")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsHidden")
                         .HasColumnType("boolean");
 
@@ -444,8 +459,14 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<long?>("PerceptualHash")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset?>("ProcessedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<float?>("Sharpness")
+                        .HasColumnType("real");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -471,7 +492,9 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CollectionId");
+                    b.HasIndex("BurstGroupId");
+
+                    b.HasIndex("CollectionId", "TakenAt");
 
                     b.HasIndex("EventId", "CollectionId");
 

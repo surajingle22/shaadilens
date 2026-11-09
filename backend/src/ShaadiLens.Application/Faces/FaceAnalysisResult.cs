@@ -1,11 +1,15 @@
 namespace ShaadiLens.Application.Faces;
 
 /// <summary>Result of analysing one image. All coordinates are in original image pixels.</summary>
+/// <param name="Sharpness">Laplacian variance of the whole photo (512px); for photos without faces.</param>
+/// <param name="Phash">64-bit perceptual hash as 16 hex chars; near-identical photos differ in few bits.</param>
 public sealed record FaceAnalysisResult(
     int Width,
     int Height,
     IReadOnlyList<DetectedFace> Faces,
-    double ElapsedMs);
+    double ElapsedMs,
+    double? Sharpness = null,
+    string? Phash = null);
 
 /// <summary>One detected face.</summary>
 /// <param name="BBox">Face rectangle in pixels.</param>
@@ -15,6 +19,7 @@ public sealed record FaceAnalysisResult(
 /// <param name="Pose">Head rotation in degrees. |Yaw| &gt; ~30 = side profile, less reliable embedding.</param>
 /// <param name="FacePx">min(width, height) of the box in pixels. Tiny faces give poor embeddings.</param>
 /// <param name="Blur">Laplacian variance of the face crop; higher = sharper.</param>
+/// <param name="Ear">Eye aspect ratio from the 68 landmarks (~0.3 open, &lt; 0.17 closed); null if unknown.</param>
 public sealed record DetectedFace(
     // Explicit name: the snake_case policy would otherwise look for "b_box".
     [property: System.Text.Json.Serialization.JsonPropertyName("bbox")] FaceBox BBox,
@@ -23,7 +28,8 @@ public sealed record DetectedFace(
     float[] Embedding,
     FacePose Pose,
     float FacePx,
-    float Blur);
+    float Blur,
+    float? Ear = null);
 
 public sealed record FaceBox(float X, float Y, float W, float H);
 

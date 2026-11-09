@@ -6,7 +6,7 @@ Runs entirely on one machine with Docker Compose — no paid APIs, no cloud AI.
 > **Privacy note:** face embeddings are biometric data. This app is meant for a private family event:
 > guests give explicit consent, can delete their data at any time, and data is purged when the event expires.
 
-**Status:** Phase 2 complete — live matching, feedback, notifications, couple features, people, TV, hot folder.
+**Status:** Phase 3 in progress — 3a culling report done (blurry / eyes closed / near-duplicates). Phase 2 complete — live matching, feedback, notifications, couple features, people, TV, hot folder.
 See [docs/SPEC.md](docs/SPEC.md) §12.
 
 ## What it does

@@ -20,8 +20,11 @@ What happens for one photo (see docs/AI-PIPELINE.md for the long version):
        different     ~ -0.1 .. 0.30
    The .NET side stores these in pgvector and compares them there.
 
-4. POSE (model: 1k3d68.onnx) gives pitch / yaw / roll in degrees.
-   Large |yaw| = side profile, which makes embeddings less reliable.
+4. POSE + LANDMARKS (model: 1k3d68.onnx): 68 points around eyes, brows, nose, mouth and jaw,
+   plus pitch / yaw / roll in degrees. Large |yaw| = side profile, which makes embeddings less
+   reliable. The 6 points around each eye also tell us whether the eyes are closed (eye aspect ratio).
+
+5. CULLING (whole photo, no model): sharpness + perceptual hash, see quality.py.
 """
 
 import logging
@@ -36,7 +39,7 @@ from insightface.app import FaceAnalysis
 from insightface.app.common import Face
 from insightface.utils import face_align
 
-from .quality import blur_score
+from .quality import blur_score, eye_aspect_ratio, image_sharpness, phash
 
 log = logging.getLogger("face-service.engine")
 
@@ -105,11 +108,14 @@ class FaceEngine:
                 "pose": {"yaw": yaw, "pitch": pitch, "roll": roll},
                 "face_px": float(min(bw, bh)),
                 "blur": blur_score(img_bgr, int(x1), int(y1), int(x2), int(y2)),
+                # Eye aspect ratio from the 68 landmarks (a ratio, so the downscale doesn't matter).
+                "ear": eye_aspect_ratio(getattr(f, "landmark_3d_68", None)),
             })
 
         # Biggest faces first — handy for selfies and for "main subject" logic.
         out.sort(key=lambda f: f["face_px"], reverse=True)
-        return {"width": w, "height": h, "faces": out}
+        return {"width": w, "height": h, "faces": out,
+                "sharpness": image_sharpness(img_bgr), "phash": phash(img_bgr)}
 
     def _detect_and_embed(self, img: np.ndarray) -> list[Face]:
         """Same result as FaceAnalysis.get(), but embeds all faces in ONE batched model run.

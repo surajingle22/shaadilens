@@ -31,6 +31,8 @@ public class Face
     public float FaceSizePx { get; set; }
     public float Yaw { get; set; }
     public float Pitch { get; set; }
+    /// <summary>Eye aspect ratio (lid opening ÷ eye width, both eyes averaged): ~0.3 open, &lt; 0.17 closed. Null = unknown.</summary>
+    public float? EyeAspectRatio { get; set; }
     /// <summary>"Person N" group from clustering (PersonCluster), or null (not grouped / seen once).</summary>
     public Guid? ClusterId { get; set; }
 

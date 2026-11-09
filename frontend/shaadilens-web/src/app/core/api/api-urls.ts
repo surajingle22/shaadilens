@@ -24,9 +24,13 @@ export const API = {
   collectionsOrder: (id: string) => `${v1}/events/${id}/collections/order`,
   eventPhotos: (id: string) => `${v1}/events/${id}/photos`,
   retryFailed: (id: string) => `${v1}/events/${id}/photos/retry-failed`,
+  culling: (id: string) => `${v1}/events/${id}/photos/culling`,
+  analyzeQuality: (id: string) => `${v1}/events/${id}/photos/analyze-quality`,
+  hideBurstExtras: (id: string) => `${v1}/events/${id}/photos/hide-burst-extras`,
 
   photo: (id: string) => `${v1}/photos/${id}`,
   reprocess: (id: string) => `${v1}/photos/${id}/reprocess`,
+  keepInBurst: (id: string) => `${v1}/photos/${id}/keep-in-burst`,
 
   initUpload: (eventId: string) => `${v1}/events/${eventId}/uploads`,
   upload: (uploadId: string) => `${v1}/uploads/${uploadId}`,

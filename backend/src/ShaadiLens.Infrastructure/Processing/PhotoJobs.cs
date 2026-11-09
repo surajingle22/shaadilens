@@ -4,9 +4,11 @@ using Hangfire;
 using Hangfire.Server;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Pgvector;
 using ShaadiLens.Application.Abstractions;
 using ShaadiLens.Application.Faces;
+using ShaadiLens.Application.Photos;
 using ShaadiLens.Domain.Entities;
 using ShaadiLens.Domain.Enums;
 using ShaadiLens.Infrastructure.FaceService;
@@ -38,6 +40,8 @@ public sealed class PhotoJobs(
     IGuestNotifier notifier,
     IStorageService storage,
     IBackgroundJobClient jobs,
+    BurstGrouper bursts,
+    IOptions<CullingOptions> culling,
     ILogger<PhotoJobs> log)
 {
     public const int MaxAttempts = 3;
@@ -136,6 +140,7 @@ public sealed class PhotoJobs(
             .Select(f => ToEntity(f, photo, result.Width, result.Height))
             .ToList();
         db.Faces.AddRange(kept);
+        Culling.Apply(photo, kept, result, culling.Value); // blur / eyes closed / perceptual hash
 
         photo.FaceCount = kept.Count;
         photo.Status = PhotoStatus.FacesDetected;
@@ -145,6 +150,8 @@ public sealed class PhotoJobs(
 
         log.LogInformation("Faces for photo {PhotoId}: {Kept}/{Found} kept in {Ms} ms (face-service {EngineMs} ms)",
             photoId, kept.Count, result.Faces.Count, sw.ElapsedMilliseconds, (int)result.ElapsedMs);
+
+        await GroupBurstAsync(photoId, ct);
 
         // Reverse search: does anyone who already registered appear in this new photo?
         var newlyVisible = await matcher.MatchPhotoAsync(photoId, decisions, ct);
@@ -160,6 +167,59 @@ public sealed class PhotoJobs(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             log.LogWarning(ex, "Could not schedule notifications for photo {PhotoId}", photoId); // the photo itself is fine
+        }
+    }
+
+    /// <summary>
+    /// Backfill for photos processed before the culling report existed: asks the face-service again but only
+    /// updates the culling fields (sharpness, eyes, perceptual hash). Faces, guest matches and People groups stay
+    /// exactly as they are — re-running full face detection would replace the faces.
+    /// </summary>
+    [Queue("faces")]
+    [AutomaticRetry(Attempts = 1)]
+    public async Task AnalyzeQualityAsync(Guid photoId, CancellationToken ct)
+    {
+        var photo = await db.Photos.Include(p => p.Faces).FirstOrDefaultAsync(p => p.Id == photoId, ct);
+        if (photo?.StorageKeyWeb is null) return;
+
+        FaceAnalysisResult result;
+        await using (var image = await storage.OpenReadAsync(photo.StorageKeyWeb, ct))
+            result = await faceEngine.AnalyzeAsync(image, "web.jpg", ct);
+
+        // Same image + same model → the same faces come back. Pair them with the stored faces by box overlap.
+        foreach (var face in photo.Faces)
+        {
+            var best = result.Faces
+                .Select(d => (d, iou: Iou(face, d.BBox, result.Width, result.Height)))
+                .MaxBy(x => x.iou);
+            face.EyeAspectRatio = best.iou >= 0.5 ? best.d.Ear : null;
+        }
+        Culling.Apply(photo, photo.Faces, result, culling.Value);
+        await db.SaveChangesAsync(ct);
+        await GroupBurstAsync(photoId, ct);
+    }
+
+    private static double Iou(Face f, FaceBox b, int width, int height)
+    {
+        double bx = b.X / width, by = b.Y / height, bw = b.W / width, bh = b.H / height;
+        var ix = Math.Max(0, Math.Min(f.BoxX + f.BoxW, bx + bw) - Math.Max(f.BoxX, bx));
+        var iy = Math.Max(0, Math.Min(f.BoxY + f.BoxH, by + bh) - Math.Max(f.BoxY, by));
+        var inter = ix * iy;
+        var union = f.BoxW * f.BoxH + bw * bh - inter;
+        return union <= 0 ? 0 : inter / union;
+    }
+
+    /// <summary>Near-duplicate grouping is a nice-to-have: never fail (and retry) the whole photo because of it.</summary>
+    private async Task GroupBurstAsync(Guid photoId, CancellationToken ct)
+    {
+        try
+        {
+            await bursts.AssignAsync(photoId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            log.LogWarning(ex, "Burst grouping failed for photo {PhotoId}", photoId);
+            db.ChangeTracker.Clear();
         }
     }
 
@@ -179,6 +239,7 @@ public sealed class PhotoJobs(
         FaceSizePx = f.FacePx,
         Yaw = f.Pose.Yaw,
         Pitch = f.Pose.Pitch,
+        EyeAspectRatio = f.Ear,
     };
 
     private async Task MarkFailedAsync(Photo photo, string error, CancellationToken ct)
@@ -206,6 +267,9 @@ public sealed class HangfirePhotoPipelineScheduler(IBackgroundJobClient jobs) : 
 
     public void EnqueueImageRebuild(Guid photoId) =>
         jobs.Enqueue<PhotoJobs>(j => j.RebuildImagesAsync(photoId, CancellationToken.None));
+
+    public void EnqueueQualityAnalysis(Guid photoId) =>
+        jobs.Enqueue<PhotoJobs>(j => j.AnalyzeQualityAsync(photoId, CancellationToken.None));
 
     public void EnqueueClustering(Guid eventId, float eps, int minSamples) =>
         jobs.Enqueue<ClusterJobs>(j => j.RunAsync(eventId, eps, minSamples, CancellationToken.None));

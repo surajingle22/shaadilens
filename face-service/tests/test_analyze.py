@@ -102,3 +102,10 @@ def test_large_image_bbox_is_in_original_coordinates(client, group_img):
 def test_rejects_non_image(client):
     r = client.post("/v1/analyze", files={"file": ("x.txt", b"hello", "text/plain")})
     assert r.status_code == 400
+
+
+def test_analyze_returns_culling_fields(client, group_img):
+    res = post_image(client, group_img)
+    assert len(res["phash"]) == 16 and res["sharpness"] > 0
+    ears = [f["ear"] for f in res["faces"] if f["ear"] is not None and abs(f["pose"]["yaw"]) < 35]
+    assert ears and all(0.12 < e < 0.6 for e in ears)  # everyone in the sample has their eyes open

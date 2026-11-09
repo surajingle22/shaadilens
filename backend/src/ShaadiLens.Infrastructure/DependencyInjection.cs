@@ -82,6 +82,7 @@ public static class DependencyInjection
         // ---- Background jobs (Hangfire, stored in Postgres schema "hangfire") ----
         services.AddScoped<ImageProcessor>();
         services.AddScoped<PhotoJobs>();
+        services.AddScoped<BurstGrouper>();
         services.AddScoped<MatchJobs>();
         services.AddScoped<PurgeJobs>();
         services.AddScoped<ClusterJobs>();

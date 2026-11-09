@@ -106,4 +106,20 @@ public sealed class EventsController(EventService events, PhotoService photos) :
     /// <summary>Re-render web/thumb images with the current watermark setting (background jobs).</summary>
     [HttpPost("{id:guid}/photos/rebuild-images")]
     public async Task<object> RebuildImages(Guid id, CancellationToken ct) => new { queued = await photos.RebuildImagesAsync(id, ct) };
+
+    // ---------- culling report ----------
+
+    /// <summary>Counts for the Blurry / Eyes closed / Duplicates filter chips.</summary>
+    [HttpGet("{id:guid}/photos/culling")]
+    public Task<CullingSummaryDto> Culling(Guid id, [FromQuery] Guid? collectionId, CancellationToken ct) =>
+        photos.GetCullingSummaryAsync(id, collectionId, ct);
+
+    /// <summary>Run the culling analysis on photos processed before it existed (faces and matches are untouched).</summary>
+    [HttpPost("{id:guid}/photos/analyze-quality")]
+    public async Task<object> AnalyzeQuality(Guid id, CancellationToken ct) => new { queued = await photos.AnalyzeExistingAsync(id, ct) };
+
+    /// <summary>Hide every near-duplicate except the keeper of its burst.</summary>
+    [HttpPost("{id:guid}/photos/hide-burst-extras")]
+    public async Task<object> HideBurstExtras(Guid id, [FromQuery] Guid? collectionId, CancellationToken ct) =>
+        new { hidden = await photos.HideBurstExtrasAsync(id, collectionId, ct) };
 }

@@ -72,8 +72,11 @@ Plus our own quality signal:
     "embedding": [512 floats, length 1],
     "pose": {"yaw": -8.1, "pitch": 4.0, "roll": 1.2},
     "face_px": 310.2,
-    "blur": 182.5
-  }]
+    "blur": 182.5,
+    "ear": 0.29
+  }],
+  "sharpness": 427.3,
+  "phash": "c3a1f0e8d2b49671"
 }
 ```
 Faces are sorted largest first.
@@ -219,6 +222,45 @@ docker compose run --rm -v ./eval-data:/data face-service python tools/eval.py /
 Prints, per threshold, how many photos would be shown, precision (shown photos that are right), recall (right
 photos that are shown) and F1, plus the best-F1 threshold. 30–50 labelled photos of 5–10 people are enough to
 see where the curve bends for your camera, lighting and makeup.
+## 4g. Culling report — blurry, eyes closed, near-duplicates (Phase 3a)
+
+A photographer delivers maybe 1 500 of the 4 000 frames they shot. Three cheap signals help pick: none needs a new
+model, they reuse what `/v1/analyze` already computes (code: `face-service/app/quality.py`, rules:
+`Application/Photos/Culling.cs`, thresholds: config section `Culling`).
+
+**Blurry — Laplacian variance.** The Laplacian filter responds to edges; a sharp image has many strong edges, so the
+*variance* of the filtered image is high, a soft one is smooth and scores low. Wedding portraits blur the background
+*on purpose* (shallow depth of field), so a photo with people is judged by its **sharpest face** (112 px crop, the
+same `blur` the selfie check uses) and only a photo without faces by the whole image (512 px). Measured on a real
+wedding set: sharpest faces score 130–600, the same photos blurred until they look soft drop below ~60 → rule
+`BlurryFaceBelow = 60`, `BlurryImageBelow = 25`.
+
+**Eyes closed — eye aspect ratio (EAR).** The `1k3d68` model we already run for head pose also returns 68 landmarks.
+Points 36–41 and 42–47 outline the two eyes (corner, two upper-lid points, corner, two lower-lid points):
+
+```
+        p1   p2
+   p0 ●───────● p3        EAR = (|p1−p5| + |p2−p4|) / (2·|p0−p3|)
+        p5   p4               ≈ 0.25–0.35 open,  < 0.17 closed
+```
+It is a ratio, so it doesn't depend on face size. On real photos the two lowest values (0.14, 0.15) were exactly
+the two frames with closed eyes; squinting smiles land around 0.19. Landmarks on side profiles are nonsense (EAR > 1),
+so faces turned > 35° are ignored, and so are small faces and faces much smaller than the main subject — a blinking
+guest in the background shouldn't flag the couple's portrait.
+
+**Near-duplicates — perceptual hash (pHash).** SHA-256 changes completely if one pixel changes; a *perceptual* hash
+changes a little when the picture changes a little: greyscale → 32×32 → DCT (the maths inside JPEG) → keep the 8×8
+lowest frequencies → 1 bit each, "above the median?". Two photos are compared by counting differing bits (Hamming
+distance). Measured: burst frames of the same moment differ in 0–8 bits, unrelated photos in ~32 (1 % of random pairs
+≤ 16). Rule: **≤ 10 bits, same collection, taken within 60 s** (EXIF) → same burst. Grouping is transitive (A≈B, B≈C →
+one group) and happens right after face detection under a per-collection Postgres advisory lock, because several
+face workers run in parallel. The keeper of each burst is "fewest closed eyes, then sharpest" unless the admin picks
+another one.
+
+Photos processed before 3a are filled in by **Analyze them** (Photos tab): it calls `/v1/analyze` again but only
+updates the culling fields — faces, matches and People groups stay as they are (stored faces are paired with the new
+detections by box overlap to copy the eye ratio).
+
 ## 5. Where it lives
 
 - `Face.Embedding vector(512)` and `GuestReference.Embedding vector(512)` in Postgres.

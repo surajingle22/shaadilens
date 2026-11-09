@@ -91,12 +91,15 @@ public sealed class FakeFaceEngine : IFaceEngine
     /// <summary>Faces to "detect" in the next analyzed image.</summary>
     public List<DetectedFace> NextFaces { get; set; } = [];
     public int Calls { get; private set; }
+    /// <summary>Whole-photo sharpness and perceptual hash of the next analysed image (null = old face-service).</summary>
+    public double? NextSharpness { get; set; }
+    public string? NextPhash { get; set; }
 
     public Task<FaceAnalysisResult> AnalyzeAsync(Stream image, string fileName, CancellationToken ct = default)
     {
         Calls++;
         // The pipeline sends the 2048px web image; pretend it's 2048x1365.
-        return Task.FromResult(new FaceAnalysisResult(2048, 1365, NextFaces, 12.3));
+        return Task.FromResult(new FaceAnalysisResult(2048, 1365, NextFaces, 12.3, NextSharpness, NextPhash));
     }
 
     /// <summary>What the next selfie check returns (set by tests).</summary>
@@ -169,5 +172,7 @@ public sealed class RecordingScheduler : IPhotoPipelineScheduler
     public void EnqueueFaceDetection(Guid photoId) => Add(FaceDetection, photoId);
     public void EnqueueImageRebuild(Guid photoId) => Add(Rebuild, photoId);
     public void EnqueueClustering(Guid eventId, float eps, int minSamples) => Add(Clustering, eventId);
+    public List<Guid> Quality { get; } = [];
+    public void EnqueueQualityAnalysis(Guid photoId) => Add(Quality, photoId);
     public void EnqueueRematchEvent(Guid eventId) => Add(Rematch, eventId);
 }

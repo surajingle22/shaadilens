@@ -30,7 +30,7 @@ export interface PhotoDialogData {
             @if (showFaces()) {
               @for (f of d.faces; track f.id) {
                 <div class="box" [style.left.%]="f.x * 100" [style.top.%]="f.y * 100" [style.width.%]="f.w * 100" [style.height.%]="f.h * 100"
-                     [matTooltip]="'Detector ' + (f.detScore | number: '1.2-2') + ' · ' + (f.faceSizePx | number: '1.0-0') + ' px · turned ' + (f.yaw | number: '1.0-0') + '° · sharpness ' + (f.quality | number: '1.0-0')"></div>
+                     [matTooltip]="'Detector ' + (f.detScore | number: '1.2-2') + ' · ' + (f.faceSizePx | number: '1.0-0') + ' px · turned ' + (f.yaw | number: '1.0-0') + '° · sharpness ' + (f.quality | number: '1.0-0') + (f.eyeAspectRatio !== null ? ' · eyes ' + (f.eyeAspectRatio | number: '1.2-2') : '')"></div>
               }
             }
           </div>
@@ -43,9 +43,24 @@ export interface PhotoDialogData {
             <dt>Taken</dt><dd>{{ d.photo.takenAt ? (d.photo.takenAt | date: 'd MMM y, HH:mm' : 'UTC') : '—' }}</dd>
             <dt>Camera</dt><dd>{{ d.cameraModel ?? '—' }}</dd>
             <dt>Collection</dt><dd>{{ collectionName(d.photo.collectionId) }}</dd>
+            <dt>Culling</dt>
+            <dd>
+              @if (!d.photo.analysed) { <span class="muted">not analysed yet</span> }
+              @else {
+                @if (d.photo.isBlurry) { <span class="flag"><mat-icon>blur_on</mat-icon> Blurry</span> }
+                @if (d.photo.closedEyes) { <span class="flag"><mat-icon>visibility_off</mat-icon> Eyes closed ({{ d.photo.closedEyes }})</span> }
+                @if (d.photo.burstGroupId) {
+                  <span class="flag"><mat-icon>burst_mode</mat-icon> {{ d.photo.isBurstBest ? 'Best of its burst' : 'Near-duplicate' }}</span>
+                }
+                @if (!d.photo.isBlurry && !d.photo.closedEyes && !d.photo.burstGroupId) { Looks good }
+              }
+            </dd>
           </dl>
           <mat-slide-toggle [ngModel]="showFaces()" (ngModelChange)="showFaces.set($event)">Show face boxes</mat-slide-toggle>
           <div class="actions">
+            @if (d.photo.burstGroupId && !d.photo.isBurstBest) {
+              <button mat-flat-button (click)="keep()"><mat-icon>verified</mat-icon> Keep this one of the burst</button>
+            }
             <button mat-stroked-button (click)="update({ isHighlight: !d.photo.isHighlight })">
               <mat-icon>{{ d.photo.isHighlight ? 'star' : 'star_outline' }}</mat-icon> {{ d.photo.isHighlight ? 'Unmark highlight' : 'Mark highlight' }}
             </button>
@@ -80,6 +95,8 @@ export interface PhotoDialogData {
     .actions { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
     .actions button { justify-content: flex-start; }
     .error, .danger { color: var(--mat-sys-error); }
+    .flag { display: inline-flex; align-items: center; gap: 2px; margin-right: 8px; }
+    .flag mat-icon { font-size: 16px; width: 16px; height: 16px; }
   `,
 })
 export class PhotoDialog {
@@ -102,6 +119,10 @@ export class PhotoDialog {
 
   protected async setCover(): Promise<void> {
     await this.act(() => this.api.setCover(this.data.event.id, this.data.photoId), 'Cover photo set');
+  }
+
+  protected async keep(): Promise<void> {
+    await this.act(() => this.api.keepInBurst(this.data.photoId), 'This one is now the keeper');
   }
 
   protected async reprocess(): Promise<void> {
