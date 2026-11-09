@@ -118,6 +118,9 @@ namespace ShaadiLens.Infrastructure.Persistence.Migrations
                     b.Property<bool>("FaceSearchEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("HighlightsForAllGuests")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsPublished")
                         .HasColumnType("boolean");
 

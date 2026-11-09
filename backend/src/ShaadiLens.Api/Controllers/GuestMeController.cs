@@ -92,6 +92,10 @@ public sealed class GuestMeController(GuestAccessService guests, TokenService to
     public Task<PagedResult<GuestPhotoDto>> Gallery([FromQuery] Guid? collectionId, [FromQuery] int page = 1, [FromQuery] int pageSize = 60, CancellationToken ct = default) =>
         guests.GetGalleryAsync(Ctx, collectionId, page, pageSize, ct);
 
+    /// <summary>Highlights strip ("stories") at the top of the gallery.</summary>
+    [HttpGet("highlights")]
+    public Task<IReadOnlyList<HighlightStoryDto>> Highlights(CancellationToken ct) => guests.GetHighlightsAsync(Ctx, ct);
+
     /// <summary>Collection tabs with photo counts for this viewer.</summary>
     [HttpGet("collections")]
     public Task<IReadOnlyList<GuestCollectionDto>> Collections(CancellationToken ct) => guests.GetCollectionsAsync(Ctx, ct);

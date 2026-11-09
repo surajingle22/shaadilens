@@ -198,6 +198,18 @@
     </div>
   </form>
 
+  <!-- ---------- highlights strip ---------- -->
+  <section class="panel">
+    <h2>Highlights strip</h2>
+    <p class="muted small">
+      Photos marked as highlights (★ in a photo, or Photos → Highlights → <strong>Suggest highlights</strong>) appear as
+      “stories” at the top of the guests' gallery, one bubble per collection.
+    </p>
+    <mat-slide-toggle [checked]="ev.highlightsForAllGuests" (change)="saveHighlights($event.checked)" [disabled]="saving()">
+      Show all highlights to every guest (off: guests only see the highlights they are in)
+    </mat-slide-toggle>
+  </section>
+
   <section class="panel danger">
     <h2>Danger zone</h2>
     <button mat-stroked-button color="warn" (click)="deleteEvent()"><mat-icon>delete_forever</mat-icon> Delete event</button>

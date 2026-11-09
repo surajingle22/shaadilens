@@ -20,6 +20,9 @@
   </mat-menu>
 </header>
 
+<!-- Highlights ("stories") picked by the couple / photographer -->
+@if (!isSelection()) { <app-highlights-strip /> }
+
 @if (!isFull()) {
   <p class="summary">
     @if (totalAll() > 0) {

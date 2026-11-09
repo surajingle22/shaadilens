@@ -13,6 +13,7 @@ import { Realtime } from '../../core/realtime/realtime';
 import { Lightbox } from './lightbox';
 import { NotifyCard } from './notify-card';
 import { ReelCard } from './reel-card';
+import { HighlightsStrip } from '../highlights/highlights-strip';
 
 const PAGE_SIZE = 60;
 
@@ -23,7 +24,7 @@ const PAGE_SIZE = 60;
  */
 @Component({
   selector: 'app-guest-gallery',
-  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox, SelfieStep, NotifyCard, ReelCard],
+  imports: [MatButtonModule, MatChipsModule, MatIconModule, MatMenuModule, MatProgressBarModule, Lightbox, SelfieStep, NotifyCard, ReelCard, HighlightsStrip],
   providers: [Realtime],
   templateUrl: './guest-gallery.html',
   styleUrl: './guest-gallery.scss',

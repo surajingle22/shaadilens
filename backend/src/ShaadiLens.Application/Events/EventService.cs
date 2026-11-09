@@ -69,6 +69,13 @@ public sealed class EventService(
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task UpdateHighlightSettingsAsync(Guid id, HighlightSettingsDto s, CancellationToken ct)
+    {
+        var ev = await FindAsync(id, ct);
+        ev.HighlightsForAllGuests = s.ForAllGuests;
+        await db.SaveChangesAsync(ct);
+    }
+
     public async Task UpdateReelSettingsAsync(Guid id, ReelSettingsDto s, CancellationToken ct)
     {
         if (s.PhotoCount is < 3 or > 30) throw new BadRequestException("A reel can have 3 to 30 photos.");
@@ -225,6 +232,6 @@ public sealed class EventService(
             ev.WatermarkEnabled, ev.WatermarkText, ev.IsPublished, ev.FaceSearchEnabled, ev.CoverPhotoId,
             ev.CoverPhotoId is { } cover ? urls.GetUrl(cover, PhotoVariant.Web) : null, ev.ExpiresAt, ev.CreatedAt,
             FaceSettingsDto.From(ev.FaceSettings), ev.PurgedAt, collections,
-            new ReelSettingsDto(ev.ReelsEnabled, ev.ReelPhotoCount));
+            new ReelSettingsDto(ev.ReelsEnabled, ev.ReelPhotoCount), ev.HighlightsForAllGuests);
     }
 }

@@ -250,6 +250,16 @@ api → SignalR "ReelUpdated" → guest's reel card reloads (also polls every 5 
 - Settings shows the music tracks and whether a Hangfire server on queue `video` is alive.
 - `backend/Dockerfile` stages: `runtime` (api) and `reel` (runtime + ffmpeg, ~580 MB more).
 
+## 7g. Highlights strip (Phase 3c)
+
+- `GET /api/v1/public/highlights` → stories per collection (`IsHighlight`, not hidden, collection not hidden).
+  Full/Selection links see all; Guest/VIP links see all only if `Event.HighlightsForAllGuests` (default on),
+  otherwise only highlights they are matched in.
+- Admin: `GET events/{id}/photos/highlight-suggestions` (sharp, people, eyes open, burst keeper, not look-alike
+  ≤ 16 bits of an already suggested photo, round-robin over collections), `POST events/{id}/photos/highlights`
+  (bulk mark), `PUT events/{id}/highlight-settings`.
+- Angular `guest/highlights/highlights-strip.ts` (bubbles + fullscreen viewer; navigation in `story-cursor.ts`).
+
 ## 8. Configuration
 
 All secrets via `.env` → environment variables → ASP.NET Core configuration

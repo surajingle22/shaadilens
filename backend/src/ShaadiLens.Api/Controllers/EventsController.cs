@@ -46,6 +46,14 @@ public sealed class EventsController(EventService events, PhotoService photos) :
     [HttpGet("{id:guid}/stats")]
     public Task<EventStatsDto> Stats(Guid id, CancellationToken ct) => events.GetStatsAsync(id, ct);
 
+    /// <summary>Do Guest-link guests see every highlight in the stories strip, or only the ones they are in?</summary>
+    [HttpPut("{id:guid}/highlight-settings")]
+    public async Task<IActionResult> HighlightSettings(Guid id, HighlightSettingsDto req, CancellationToken ct)
+    {
+        await events.UpdateHighlightSettingsAsync(id, req, ct);
+        return NoContent();
+    }
+
     /// <summary>Guest highlight reels on/off and photos per reel.</summary>
     [HttpPut("{id:guid}/reel-settings")]
     public async Task<IActionResult> ReelSettings(Guid id, Application.Reels.ReelSettingsDto req, CancellationToken ct)
@@ -125,6 +133,16 @@ public sealed class EventsController(EventService events, PhotoService photos) :
     /// <summary>Run the culling analysis on photos processed before it existed (faces and matches are untouched).</summary>
     [HttpPost("{id:guid}/photos/analyze-quality")]
     public async Task<object> AnalyzeQuality(Guid id, CancellationToken ct) => new { queued = await photos.AnalyzeExistingAsync(id, ct) };
+
+    /// <summary>Good candidates for the guests' highlights strip (not marked yet).</summary>
+    [HttpGet("{id:guid}/photos/highlight-suggestions")]
+    public Task<IReadOnlyList<PhotoDto>> HighlightSuggestions(Guid id, [FromQuery] int count = 24, CancellationToken ct = default) =>
+        photos.SuggestHighlightsAsync(id, count, ct);
+
+    /// <summary>Mark / unmark several photos as highlights.</summary>
+    [HttpPost("{id:guid}/photos/highlights")]
+    public async Task<object> SetHighlights(Guid id, SetHighlightsRequest req, CancellationToken ct) =>
+        new { changed = await photos.SetHighlightsAsync(id, req.PhotoIds, req.IsHighlight, ct) };
 
     /// <summary>Hide every near-duplicate except the keeper of its burst.</summary>
     [HttpPost("{id:guid}/photos/hide-burst-extras")]

@@ -52,6 +52,11 @@ export class AdminApi {
   stats = (id: string) => this.get<EventStats>(API.stats(id));
   saveFaceSettings = (id: string, s: FaceSettings) => this.put<void>(API.faceSettings(id), s);
   saveReelSettings = (id: string, s: ReelSettings) => this.put<void>(API.reelSettings(id), s);
+  saveHighlightSettings = (id: string, forAllGuests: boolean) => this.put<void>(API.highlightSettings(id), { forAllGuests });
+  highlightSuggestions = (eventId: string, count = 24) =>
+    firstValueFrom(this.http.get<Photo[]>(API.highlightSuggestions(eventId), { params: { count } }));
+  setHighlights = (eventId: string, photoIds: string[], isHighlight: boolean) =>
+    this.post<{ changed: number }>(API.highlights(eventId), { photoIds, isHighlight });
   setCover = (id: string, photoId: string | null) => this.put<void>(API.cover(id), { photoId });
 
   // ---------- collections ----------

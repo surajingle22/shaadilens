@@ -147,3 +147,8 @@ container renders it (Settings → Highlight reels shows whether it runs). Per e
 Speed (i5-8250U, `REEL_CPUS=2`): 12 photos ≈ 2 min, 30 s video ≈ 12 MB. More cores: `REEL_CPUS=4` in `.env`,
 then `docker compose up -d reel-worker`. A reel stuck at "Making your reel…": `docker compose ps reel-worker`,
 `docker compose logs reel-worker`. Limits: one reel at a time, 3 per guest per 24 h (`Reels__MaxPerDay`).
+
+## Highlights strip ("stories")
+Photos → **Highlights** chip → **Suggest highlights** → untick what you don't like → **Mark N as highlights**
+(or ★ in a single photo). Guests see one bubble per collection at the top of their gallery. Overview →
+Highlights strip: turn off "Show all highlights to every guest" if guests should only see highlights they're in.

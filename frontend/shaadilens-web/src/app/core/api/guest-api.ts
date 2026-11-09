@@ -110,6 +110,13 @@ export interface ReelState {
   latest: Reel | null;
 }
 
+/** One bubble of the highlights strip: a collection's highlights. */
+export interface HighlightStory {
+  collectionId: string;
+  name: string;
+  photos: GuestPhoto[];
+}
+
 /** Guest endpoints. The guest JWT is added by the auth interceptor for /api/v1/public/*. */
 @Injectable({ providedIn: 'root' })
 export class GuestApi {
@@ -150,6 +157,7 @@ export class GuestApi {
   }
   deleteMe = () => firstValueFrom(this.http.delete<void>(`${this.base}/me`));
 
+  highlights = () => firstValueFrom(this.http.get<HighlightStory[]>(`${this.base}/highlights`));
   reel = () => firstValueFrom(this.http.get<ReelState>(`${this.base}/me/reel`));
   makeReel = () => firstValueFrom(this.http.post<Reel>(`${this.base}/me/reel`, {}));
 

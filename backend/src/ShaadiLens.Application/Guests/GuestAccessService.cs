@@ -163,6 +163,34 @@ public sealed class GuestAccessService(
         return await PageAsync(VisiblePhotos(ctx.EventId), collectionId, page, pageSize, ct);
     }
 
+    /// <summary>
+    /// Highlights strip ("stories"): photos the admin marked as highlights, grouped by collection. Full-gallery links
+    /// always see them; Guest/VIP links see all highlights only if the event allows it, otherwise just the highlights
+    /// they are in themselves (photos they could see anyway).
+    /// </summary>
+    public async Task<IReadOnlyList<HighlightStoryDto>> GetHighlightsAsync(GuestContext ctx, CancellationToken ct)
+    {
+        var (_, ev, _) = await OpenSessionAsync(ctx, ct);
+        IQueryable<Photo> photos;
+        if (ctx.LinkType.ShowsWholeGallery() || ev.HighlightsForAllGuests) photos = VisiblePhotos(ctx.EventId);
+        else if (ctx.GuestId is { } guestId)
+            photos = VisibleMatches(ctx, guestId).Where(m => Shown.Contains(m.Status)).Select(m => m.Photo!);
+        else return [];
+
+        var list = await photos.Where(p => p.IsHighlight && p.Status != PhotoStatus.Uploaded)
+            .OrderBy(p => p.TakenAt ?? p.UploadedAt).ThenBy(p => p.Id)
+            .Take(MaxHighlights).ToListAsync(ct);
+        if (list.Count == 0) return [];
+        var ids = list.Select(p => p.CollectionId).Distinct().ToList();
+        var collections = await db.Collections.AsNoTracking().Where(c => ids.Contains(c.Id))
+            .OrderBy(c => c.SortOrder).Select(c => new { c.Id, c.Name }).ToListAsync(ct);
+        return collections
+            .Select(c => new HighlightStoryDto(c.Id, c.Name, list.Where(p => p.CollectionId == c.Id).Select(ToDto).ToList()))
+            .ToList();
+    }
+
+    private const int MaxHighlights = 200;
+
     public async Task<IReadOnlyList<GuestCollectionDto>> GetCollectionsAsync(GuestContext ctx, CancellationToken ct)
     {
         await OpenSessionAsync(ctx, ct);

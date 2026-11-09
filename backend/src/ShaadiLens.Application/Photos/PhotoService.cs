@@ -27,6 +27,8 @@ public sealed record CullingSummaryDto(int Processed, int NotAnalysed, int Blurr
 
 public sealed record UpdatePhotoRequest(bool? IsHighlight, bool? IsHidden, Guid? CollectionId);
 
+public sealed record SetHighlightsRequest(IReadOnlyList<Guid> PhotoIds, bool IsHighlight);
+
 /// <summary>Admin use cases for photos.</summary>
 public sealed class PhotoService(
     IAppDbContext db, IStorageService storage, IPhotoPipelineScheduler pipeline, IMediaUrlSigner urls, IOptions<CullingOptions> culling)
@@ -195,6 +197,51 @@ public sealed class PhotoService(
         p.IsHidden = false;
         await db.SaveChangesAsync(ct);
     }
+
+    // ---------------- highlights ----------------
+
+    /// <summary>
+    /// "Suggest highlights": good-looking photos that aren't highlights yet — sharp, nobody's eyes closed, not a spare
+    /// frame of a burst, not hidden — favouring photos with people, spread over the collections. The admin confirms.
+    /// </summary>
+    public async Task<IReadOnlyList<PhotoDto>> SuggestHighlightsAsync(Guid eventId, int count, CancellationToken ct)
+    {
+        count = Math.Clamp(count, 1, 60);
+        var minSharp = culling.Value.BlurryFaceBelow;
+        var candidates = await db.Photos.AsNoTracking()
+            .Where(p => p.EventId == eventId && !p.IsHidden && !p.IsHighlight && !p.Collection!.IsHidden
+                && p.PerceptualHash != null && p.FaceCount > 0 && p.ClosedEyesCount == 0 && p.BlurScore >= minSharp
+                && (p.BurstGroupId == null || p.IsBurstBest)
+                && (p.Status == PhotoStatus.FacesDetected || p.Status == PhotoStatus.Matched))
+            .OrderByDescending(p => p.BlurScore).Take(2000)
+            .ToListAsync(ct);
+
+        // Sharp (up to a point) × people in it (1 face → 1.1, 2 → 1.4, 6+ → ~2).
+        static double Score(Domain.Entities.Photo p) =>
+            Math.Min(1.0, (p.BlurScore ?? 0) / 200.0) * Math.Log(2 + Math.Min(p.FaceCount, 8));
+
+        var queues = candidates.GroupBy(p => p.CollectionId)
+            .Select(g => new Queue<Domain.Entities.Photo>(g.OrderByDescending(Score).ThenBy(p => p.Id)))
+            .OrderByDescending(q => Score(q.Peek())).ToList();
+        // Also skip anything that merely LOOKS like a photo already picked (same pose a few minutes later isn't a
+        // burst, but two of them in the highlights is still one too many). Looser than the burst rule: ≤ 16 bits.
+        const int similarBits = 16;
+        var picked = new List<Domain.Entities.Photo>();
+        while (picked.Count < count && queues.Any(q => q.Count > 0))
+            foreach (var q in queues)
+            {
+                if (q.Count == 0 || picked.Count >= count) continue;
+                var p = q.Dequeue();
+                if (picked.Any(x => Culling.Distance(x.PerceptualHash!.Value, p.PerceptualHash!.Value) <= similarBits)) continue;
+                picked.Add(p);
+            }
+        return picked.OrderBy(p => p.TakenAt ?? p.UploadedAt).Select(ToDto).ToList();
+    }
+
+    /// <summary>Mark (or unmark) many photos as highlights at once. Returns how many changed.</summary>
+    public Task<int> SetHighlightsAsync(Guid eventId, IReadOnlyCollection<Guid> photoIds, bool isHighlight, CancellationToken ct) =>
+        db.Photos.Where(p => p.EventId == eventId && photoIds.Contains(p.Id) && p.IsHighlight != isHighlight)
+            .ExecuteUpdateAsync(s => s.SetProperty(p => p.IsHighlight, isHighlight), ct);
 
     private PhotoDto ToDto(Domain.Entities.Photo p) => new(
         p.Id, p.CollectionId, p.OriginalFileName, p.Width, p.Height, p.TakenAt, p.Status, p.FaceCount,

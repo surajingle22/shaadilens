@@ -15,6 +15,7 @@ import { CullingSummary, Photo, PhotoFilter, PhotoStatus } from '../../core/api/
 import { Notify } from '../../core/notify';
 import { EventContext } from '../event/event-context';
 import { PhotoDialog, PhotoDialogData } from './photo-dialog';
+import { SuggestHighlightsDialog } from './suggest-highlights-dialog';
 import { groupBursts } from './bursts';
 
 const PAGE_SIZE = 60;
@@ -57,6 +58,9 @@ const PAGE_SIZE = 60;
       </mat-chip-listbox>
       @if (filter() === 'Duplicates' && summary()?.burstExtras) {
         <button mat-flat-button (click)="hideExtras()"><mat-icon>auto_fix_high</mat-icon> Keep best, hide the rest</button>
+      }
+      @if (filter() === 'Highlights') {
+        <button mat-flat-button (click)="suggestHighlights()"><mat-icon>auto_awesome</mat-icon> Suggest highlights</button>
       }
     </div>
     @if (summary()?.notAnalysed; as n) {
@@ -278,6 +282,16 @@ export class PhotosPage {
     } catch (err) {
       this.notify.error(err);
     }
+  }
+
+  protected suggestHighlights(): void {
+    this.dialog.open(SuggestHighlightsDialog, { data: this.ctx.eventId(), width: '900px', maxWidth: '96vw', autoFocus: false })
+      .afterClosed()
+      .subscribe((changed: boolean | undefined) => {
+        if (!changed) return;
+        void this.refreshSummary();
+        void this.reset();
+      });
   }
 
   protected open(photo: Photo): void {

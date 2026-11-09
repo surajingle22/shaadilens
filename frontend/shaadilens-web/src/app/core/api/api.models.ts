@@ -83,6 +83,8 @@ export interface EventDetail {
   faceSettings: FaceSettings;
   collections: Collection[];
   reels: ReelSettings;
+  /** Guest-link guests see every highlight in the stories strip (false: only those they are in). */
+  highlightsForAllGuests: boolean;
 }
 
 export interface SaveEventRequest {

@@ -33,6 +33,8 @@ public class Event
     public bool ReelsEnabled { get; set; } = true;
     /// <summary>Photos per reel (about 2.4 s each).</summary>
     public int ReelPhotoCount { get; set; } = 12;
+    /// <summary>Guest-link guests see ALL highlights in the stories strip (not only the ones they are in).</summary>
+    public bool HighlightsForAllGuests { get; set; } = true;
 
     /// <summary>Guests can open links: published and not expired.</summary>
     public bool IsOpen(DateTimeOffset now) => IsPublished && (ExpiresAt is null || ExpiresAt > now);

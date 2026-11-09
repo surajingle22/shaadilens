@@ -20,7 +20,9 @@ public sealed record EventDto(
     Guid Id, string Name, string Slug, DateOnly? Date, string? Venue, string ThemeColor, string? TitleFont,
     bool WatermarkEnabled, string? WatermarkText, bool IsPublished, bool FaceSearchEnabled, Guid? CoverPhotoId, string? CoverUrl,
     DateTimeOffset? ExpiresAt, DateTimeOffset CreatedAt, FaceSettingsDto FaceSettings, DateTimeOffset? PurgedAt,
-    IReadOnlyList<CollectionDto> Collections, ReelSettingsDto Reels);
+    IReadOnlyList<CollectionDto> Collections, ReelSettingsDto Reels, bool HighlightsForAllGuests);
+
+public sealed record HighlightSettingsDto(bool ForAllGuests);
 
 public sealed record SaveEventRequest(
     string Name, DateOnly? Date, string? Venue, string? ThemeColor, string? TitleFont,

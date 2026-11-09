@@ -30,6 +30,9 @@ public sealed record GuestPhotoDto(Guid Id, Guid CollectionId, int Width, int He
 
 public sealed record GuestCollectionDto(Guid Id, string Name, int PhotoCount);
 
+/// <summary>One "story" bubble: a collection's highlights (picked by the admin), first photo as the cover.</summary>
+public sealed record HighlightStoryDto(Guid CollectionId, string Name, IReadOnlyList<GuestPhotoDto> Photos);
+
 public sealed record ZipEntrySource(Guid PhotoId, string StorageKey, string FileName, string CollectionName);
 
 /// <summary>Thrown when the selfie isn't usable; the API returns 422 with the code + friendly reason.</summary>

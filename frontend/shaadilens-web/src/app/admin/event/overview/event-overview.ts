@@ -131,6 +131,10 @@ export class EventOverview {
     }
   }
 
+  protected async saveHighlights(forAllGuests: boolean): Promise<void> {
+    await this.run(() => this.api.saveHighlightSettings(this.event.id, forAllGuests), 'Saved');
+  }
+
   protected async saveReelSettings(): Promise<void> {
     await this.run(() => this.api.saveReelSettings(this.event.id, this.reels.getRawValue()), 'Reel settings saved');
   }
