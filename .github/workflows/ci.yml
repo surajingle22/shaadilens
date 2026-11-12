@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Least privilege: jobs that push images ask for packages: write themselves.
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io/surajingle22
 
 jobs:
   backend:
@@ -49,9 +57,227 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck deploy scripts      # shellcheck is preinstalled on GitHub's Ubuntu runners
-        run: shellcheck deploy/*.sh scripts/*.sh
+        run: shellcheck deploy/*.sh scripts/*.sh .github/ci/*.sh
       - name: production env template has no real secrets
         run: |
           # every secret line must be a placeholder (GENERATED / CHANGE_ME) or empty
           ! grep -E '^(POSTGRES_PASSWORD|JWT_SECRET|MEDIA_SIGNING_KEY|DUCKDNS_TOKEN|ADMIN_PASSWORD|SMTP_PASS|VAPID_PRIVATE|UPLOADER_API_KEY)=' deploy/.env.production.example \
             | grep -vE '=(GENERATED|CHANGE_ME)?$'
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Container images (main only): every image is built natively on BOTH CPU types — amd64 on a normal runner,
+  # arm64 on GitHub's ARM runner (no emulation) — and pushed to GHCR by digest only (no tag yet).
+  # The tags (:<commit sha> and :latest) are added by `manifests`, and only after `verify-arm64` passed.
+  # ---------------------------------------------------------------------------------------------------------------
+  images:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, face-service, compose, scripts]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, reel-worker, face-service, web]
+        arch: [amd64, arm64]
+        include:
+          - { image: api,          context: backend,                 target: runtime }
+          - { image: reel-worker,  context: backend,                 target: reel }
+          - { image: face-service, context: face-service,            target: '' }
+          - { image: web,          context: frontend/shaadilens-web, target: '' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push linux/${{ matrix.arch }} by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          target: ${{ matrix.target }}
+          platforms: linux/${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          provenance: false        # keeps the image index to exactly two platforms
+          outputs: type=image,name=${{ env.REGISTRY }}/shaadilens-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }},mode=max
+      - name: Save digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          NAME: ${{ matrix.image }}-${{ matrix.arch }}
+        run: |
+          mkdir -p digests
+          echo "$DIGEST" > "digests/$NAME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.image }}-${{ matrix.arch }}
+          path: digests/*
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Proof that the server's CPU type works: runs on a real ARM64 machine.
+  #   main: tests the arm64 images just pushed (by digest).   PRs: builds the arm64 images here (nothing pushed).
+  # ---------------------------------------------------------------------------------------------------------------
+  verify-arm64:
+    needs: [backend, frontend, face-service, compose, scripts, images]
+    if: >-
+      !cancelled() &&
+      needs.backend.result == 'success' && needs.frontend.result == 'success' && needs.face-service.result == 'success' &&
+      needs.compose.result == 'success' && needs.scripts.result == 'success' &&
+      (needs.images.result == 'success' || (github.event_name == 'pull_request' && needs.images.result == 'skipped'))
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner
+        run: |
+          echo "CPU: $(uname -m), $(nproc) cores"
+          docker version --format 'docker {{.Server.Version}} ({{.Server.Arch}})'
+          docker compose version
+          jq --version
+
+      # --- main: use the pushed arm64 images ----------------------------------------------------------------------
+      - if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: github.event_name != 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*-arm64
+          path: digests
+          merge-multiple: true
+      - if: github.event_name != 'pull_request'
+        name: Image references (pushed digests)
+        run: |
+          {
+            echo "API_IMAGE=${REGISTRY}/shaadilens-api@$(cat digests/api-arm64)"
+            echo "REEL_IMAGE=${REGISTRY}/shaadilens-reel-worker@$(cat digests/reel-worker-arm64)"
+            echo "FACE_IMAGE=${REGISTRY}/shaadilens-face-service@$(cat digests/face-service-arm64)"
+            echo "WEB_IMAGE=${REGISTRY}/shaadilens-web@$(cat digests/web-arm64)"
+          } | tee -a "$GITHUB_ENV"
+
+      # --- PRs: build the arm64 images here and load them into the local Docker ---------------------------------
+      - if: github.event_name == 'pull_request'
+        uses: docker/setup-buildx-action@v3
+      - if: github.event_name == 'pull_request'
+        name: Build api (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          target: runtime
+          load: true
+          tags: smoke/api:pr
+          cache-from: type=gha,scope=api-arm64
+      - if: github.event_name == 'pull_request'
+        name: Build reel-worker (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          target: reel
+          load: true
+          tags: smoke/reel-worker:pr
+          cache-from: |
+            type=gha,scope=reel-worker-arm64
+            type=gha,scope=api-arm64
+      - if: github.event_name == 'pull_request'
+        name: Build face-service (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: face-service
+          load: true
+          tags: smoke/face-service:pr
+          cache-from: type=gha,scope=face-service-arm64
+      - if: github.event_name == 'pull_request'
+        name: Build web (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend/shaadilens-web
+          load: true
+          tags: smoke/web:pr
+          cache-from: type=gha,scope=web-arm64
+      - if: github.event_name == 'pull_request'
+        name: Image references (local builds)
+        run: |
+          {
+            echo "API_IMAGE=smoke/api:pr"
+            echo "REEL_IMAGE=smoke/reel-worker:pr"
+            echo "FACE_IMAGE=smoke/face-service:pr"
+            echo "WEB_IMAGE=smoke/web:pr"
+          } | tee -a "$GITHUB_ENV"
+
+      # --- the checks ---------------------------------------------------------------------------------------------
+      - name: face-service — unit tests (pytest) on arm64
+        run: docker run --rm "$FACE_IMAGE" pytest -q
+      - name: face-service — real model on a real photo (/v1/analyze + /v1/selfie)
+        run: |
+          docker run -d --name face-smoke -v "$PWD/.github/ci:/ci:ro" "$FACE_IMAGE"
+          docker exec face-smoke python -c "import platform, onnxruntime; print(platform.machine(), 'onnxruntime', onnxruntime.__version__)"
+          docker exec face-smoke python /ci/face-smoke.py
+          docker rm -f face-smoke
+      - name: reel-worker — ffmpeg + a 1-second H.264 encode (1080x1920, like a reel)
+        run: |
+          docker run --rm --entrypoint ffmpeg "$REEL_IMAGE" -hide_banner -version | head -n1
+          docker run --rm --entrypoint ffmpeg "$REEL_IMAGE" -hide_banner -loglevel error -nostdin \
+            -f lavfi -i testsrc=duration=1:size=1080x1920:rate=30 -c:v libx264 -preset veryfast -pix_fmt yuv420p -f null -
+          echo "libx264 encode OK"
+      - name: Whole stack on arm64 (Postgres+pgvector, face-service, .NET api + Magick.NET, reel-worker, nginx)
+        run: .github/ci/stack-smoke.sh
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Join the two builds of each image into one multi-arch tag: :<full commit sha> and :latest.
+  # Runs only when the arm64 images passed verify-arm64, so a broken image never gets a tag.
+  # ---------------------------------------------------------------------------------------------------------------
+  manifests:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [images, verify-arm64]
+    runs-on: ubuntu-24.04
+    concurrency: { group: ghcr-tags, cancel-in-progress: false }   # two quick pushes can't swap :latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create multi-arch tags
+        env:
+          SOURCE: https://github.com/${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          for name in api reel-worker face-service web; do
+            repo="${REGISTRY}/shaadilens-$name"
+            docker buildx imagetools create \
+              --annotation "index:org.opencontainers.image.source=$SOURCE" \
+              -t "$repo:$SHA" -t "$repo:latest" \
+              "$repo@$(cat "digests/$name-amd64")" "$repo@$(cat "digests/$name-arm64")"
+          done
+      - name: Inspect
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          for name in api reel-worker face-service web; do
+            echo "== shaadilens-$name:$SHA"
+            docker buildx imagetools inspect "${REGISTRY}/shaadilens-$name:$SHA" | grep -E 'Platform:' | sort -u
+          done

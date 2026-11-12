@@ -73,6 +73,43 @@ Check DuckDNS after editing `.env` (wait up to 5 minutes, or run it now):
 sudo -u deploy /opt/shaadilens/app/deploy/duckdns-update.sh; cat /opt/shaadilens/logs/duckdns.log
 ```
 
+## 3. Container images (built by CI)
+
+The server never builds anything. On every push to `main`, GitHub Actions (`.github/workflows/ci.yml`):
+
+1. runs all tests;
+2. **`images`** — builds each image twice, natively: **amd64** on a normal runner and **arm64** on GitHub's ARM
+   runner (the Oracle VM is ARM64), and pushes both to GitHub Container Registry (GHCR) *by digest* (no tag yet);
+3. **`verify-arm64`** — on a real ARM machine: face-service unit tests + the real face model on a sample photo
+   (`/v1/analyze`, `/v1/selfie`), an ffmpeg H.264 test encode in reel-worker, and the whole stack via
+   `.github/ci/stack-smoke.sh` (`/health` = Healthy, admin login, chunked upload, faces detected, thumbnail served);
+4. **`manifests`** — only if that passed: tags each image `:<full commit sha>` and `:latest`. One tag covers both
+   CPU types ("multi-arch image"); Docker on the server picks the arm64 build automatically.
+
+On pull requests, `verify-arm64` builds the arm64 images on the ARM runner and runs the same checks, without pushing.
+
+| Image | Built from |
+|---|---|
+| `ghcr.io/surajingle22/shaadilens-api` | `backend`, target `runtime` |
+| `ghcr.io/surajingle22/shaadilens-reel-worker` | `backend`, target `reel` (api + ffmpeg) |
+| `ghcr.io/surajingle22/shaadilens-face-service` | `face-service` (includes the InsightFace model) |
+| `ghcr.io/surajingle22/shaadilens-web` | `frontend/shaadilens-web` (Angular + nginx) |
+
+The packages must stay **private**: the face-service image contains the InsightFace `buffalo_l` model, which is
+licensed for non-commercial use only and must not be redistributed. Check: GitHub → your profile → **Packages** →
+each package → **Package settings** → *Danger Zone* → visibility **Private**.
+
+Check that a tag has both CPU types (needs `docker login ghcr.io` with a token that can read packages):
+```bash
+docker buildx imagetools inspect ghcr.io/surajingle22/shaadilens-api:latest | grep Platform
+```
+
+Run the stack smoke test locally from images you built yourself (own compose project + port, cleans up after):
+```bash
+FACE_IMAGE=shaadilens/face-service:dev API_IMAGE=shaadilens/api:dev REEL_IMAGE=shaadilens/reel-worker:dev \
+WEB_IMAGE=shaadilens/web:dev .github/ci/stack-smoke.sh      # needs bash, curl, jq, openssl
+```
+
 Later, the GitHub Actions key is added with:
 ```bash
 sudo bash /opt/shaadilens/app/deploy/bootstrap.sh --deploy-key "ssh-ed25519 AAAA… github-actions-deploy"
