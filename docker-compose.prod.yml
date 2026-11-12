@@ -47,6 +47,7 @@ services:
     build: !reset null
     restart: unless-stopped
     ports: !reset []           # not public: only Caddy reaches it
+    networks: [default, edge]  # default: talks to api; edge: reached by Caddy
     logging: *logging
 
   caddy:
@@ -62,6 +63,7 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data       # certificates + account key: must survive restarts (Let's Encrypt rate limits)
       - caddy_config:/config
+    networks: [edge]           # only reaches web; nginx trusts X-Forwarded-For only from this network
     depends_on:
       web:
         condition: service_healthy
@@ -71,6 +73,15 @@ services:
       timeout: 5s
       retries: 10
     logging: *logging
+
+networks:
+  # Caddy <-> web only. The fixed range is how nginx (frontend/shaadilens-web/nginx.conf, geo $from_edge_proxy)
+  # recognises Caddy and trusts the client IP it forwards; requests from anywhere else can't forge it.
+  # Keep this subnet in sync with nginx.conf. 10.255.255.0/28 is outside Docker's default address pools.
+  edge:
+    ipam:
+      config:
+        - subnet: 10.255.255.0/28
 
 volumes:
   caddy_data:

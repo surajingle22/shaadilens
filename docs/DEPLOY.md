@@ -139,6 +139,13 @@ Files: `docker-compose.prod.yml` (override of `docker-compose.yml`) and `deploy/
 | Logs | Docker default | 10 MB × 3 per container |
 | Music for reels | `./music` | `/opt/shaadilens/music` |
 
+**Real client IP.** The PIN brute-force limiter and the rate limiter need each guest's own IP. Caddy puts it in
+`X-Forwarded-For` (and drops any value a client sends). nginx passes that header on unchanged **only** for requests
+from Caddy, which it recognises by Caddy's address on the private `edge` network (`10.255.255.0/28`, created by
+`docker-compose.prod.yml`; the same range is in `nginx.conf` — keep them in sync, CI checks it). Any other request
+(dev, the laptop setup, Cloudflare Tunnel) gets its real peer address appended as before, so a forged header can
+never be the address ASP.NET uses.
+
 Certificates live in the `shaadilens_caddy_data` volume. Never delete it casually: Let's Encrypt allows only a
 few new certificates per domain per week.
 
