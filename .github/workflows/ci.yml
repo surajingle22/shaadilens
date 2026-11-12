@@ -300,3 +300,18 @@ jobs:
             echo "== shaadilens-$name:$SHA"
             docker buildx imagetools inspect "${REGISTRY}/shaadilens-$name:$SHA" | grep -E 'Platform:' | sort -u
           done
+
+  # ---------------------------------------------------------------------------------------------------------------
+  # Push to main → live: deploy the images just tagged :<sha> to the server (.github/workflows/deploy.yml).
+  # Skips with a notice while the SSH_* repository secrets are not set.
+  # ---------------------------------------------------------------------------------------------------------------
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [manifests]
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy.yml
+    with:
+      sha: ${{ github.sha }}
+    secrets: inherit

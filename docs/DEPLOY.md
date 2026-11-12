@@ -186,3 +186,83 @@ Then log in at http://localhost:8081/admin and open http://localhost:8081/hangfi
 | Caddy log: `too many certificates` / `rateLimited` | Let's Encrypt rate limit — wait (see the time in the log); don't delete `caddy_data` |
 | Selfie camera doesn't open on the phone | page must be `https://`; check the padlock, and `PUBLIC_BASE_URL=https://${DOMAIN}` in `.env` |
 | Live updates fall back to polling | WebSockets through Caddy work by default; check `dc logs web api` for `/hubs` errors |
+
+## 5. Push-to-deploy and rollback
+
+**How a change goes live:** merge (or push) to `main` → CI tests → images built for amd64 + arm64 → verified on ARM →
+tagged `:<commit sha>` → job **deploy** (`.github/workflows/deploy.yml`) logs in to the server over SSH and runs
+`deploy/deploy.sh <sha>`. Typically 15–30 minutes from merge to live; you don't touch the server.
+
+`deploy/deploy.sh <sha>` on the server (user `deploy`):
+1. takes a lock (two deploys never overlap) and refuses to run while `.env` still has `CHANGE_ME` lines;
+2. checks out the config files (compose files, Caddyfile, scripts) at `<sha>` in `/opt/shaadilens/app`;
+3. **dumps the database** to `backups/db/predeploy-<time>-<old sha>.dump` (keeps the last 5) — migrations only go
+   forward, so this is the way back if a new version changed the schema;
+4. `docker compose up -d` with images `:<sha>` (pulled only if not on disk; tags never change);
+5. waits up to 6 min until api, web and caddy are healthy **and** `https://DOMAIN/health/live` answers through Caddy
+   with a valid certificate. The api applies database migrations by itself on start (`DatabaseInitializer`);
+6. success → records the version in `state/current` (previous one in `state/previous`, all in `state/history`),
+   installs `deploy/crontab` as the deploy user's crontab, removes images older than the last 3 versions;
+7. failure → prints the last log lines and **rolls back automatically** to the version that was running before.
+
+The job logs the server in to GHCR with its own short-lived `GITHUB_TOKEN` (read-only) and logs out at the end;
+no registry password is stored on the server.
+
+### One-time setup (after the server is bootstrapped)
+
+**SSH deploy key** — a separate key used only by GitHub Actions to log in as `deploy` (no passphrase, because a
+robot uses it; it can't do anything `deploy` can't). On your PC (PowerShell):
+```powershell
+ssh-keygen -t ed25519 -N '""' -C "github-actions-deploy" -f "$env:USERPROFILE\.ssh\shaadilens_deploy"
+Get-Content "$env:USERPROFILE\.ssh\shaadilens_deploy.pub"        # public key → the server
+ssh-keyscan -t ed25519 <VM_IP>                                     # host key line → SSH_KNOWN_HOSTS
+```
+On the server (as `ubuntu`), add the public key:
+```bash
+sudo bash /opt/shaadilens/app/deploy/bootstrap.sh --deploy-key "ssh-ed25519 AAAA… github-actions-deploy"
+```
+GitHub → repo → **Settings → Secrets and variables → Actions → New repository secret**, four times:
+
+| Name | Value |
+|---|---|
+| `SSH_HOST` | the VM's public IP |
+| `SSH_USER` | `deploy` |
+| `SSH_PRIVATE_KEY` | the whole content of `shaadilens_deploy` (the file **without** `.pub`, including the BEGIN/END lines) |
+| `SSH_KNOWN_HOSTS` | the line printed by `ssh-keyscan` (pins the server's identity; the job refuses unknown hosts) |
+
+Then delete the private key file from your PC if you like — GitHub keeps the only copy it needs. Until these
+secrets exist, the deploy job is skipped with a notice.
+
+### Ship a change
+Merge the PR. Watch **Actions → CI → deploy**; the job summary shows the URL, version and `/health`.
+
+### Roll back
+- **GitHub (any version CI built):** Actions → **Deploy** → *Run workflow* → `sha` = the full commit SHA, or
+  `previous` for the version before the current one.
+- **On the server (versions still on disk = last 3):**
+  ```bash
+  sudo -iu deploy /opt/shaadilens/app/deploy/rollback.sh            # to state/previous
+  sudo -iu deploy /opt/shaadilens/app/deploy/rollback.sh 1a2b3c4    # to a version in state/history
+  ```
+- A failed deploy rolls back by itself.
+
+The next push to `main` deploys the newest commit again. To stay on an old version, revert the bad commit on `main`.
+
+**Database after a rollback.** If the version you went back from added a database migration, the older code usually
+still works with the newer schema (columns were added, not removed). If it doesn't, restore the dump taken just
+before that deploy (its name ends with the first 8 characters of the version you rolled back *to*):
+```bash
+sudo -iu deploy
+cd /opt/shaadilens/app && ls -t ../backups/db/predeploy-*
+dc() { IMAGE_TAG="$(cat ../state/current)" docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file ../.env "$@"; }
+dc stop api reel-worker
+dc exec -T postgres sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < ../backups/db/predeploy-<file>.dump
+dc start api reel-worker
+```
+
+### Where to look
+| What | Where |
+|---|---|
+| Deploy history | `/opt/shaadilens/logs/deploy.log`, `/opt/shaadilens/state/{current,previous,history}` |
+| Deploy output | GitHub → Actions → the run → job **deploy** |
+| Container status / logs | `dc ps`, `dc logs --tail=100 api` (with `dc` defined as above) |

@@ -1,0 +1,8 @@
+# Cron jobs of the `deploy` user on the server. MANAGED BY deploy/deploy.sh: every deploy installs this file as
+# the user's whole crontab (`crontab deploy/crontab`), so edit it here, not with `crontab -e` on the server.
+# Times are server-local (bootstrap.sh sets Asia/Kolkata). DuckDNS refresh is a system cron job (bootstrap.sh).
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# m  h  dom mon dow  command
+# (backups and the disk check are added in the next deployment steps)
