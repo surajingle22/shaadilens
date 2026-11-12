@@ -1,0 +1,131 @@
+name: Deploy
+
+# Deploys one version to the server over SSH (deploy/deploy.sh does the work there).
+#  - automatically: called by CI after the images of a push to main are built and verified (job "deploy");
+#  - by hand: Actions → Deploy → Run workflow → sha = a commit that CI built (empty = the newest main commit),
+#    or "previous" = roll back to the version before the current one.
+# The server pulls the private GHCR images with this job's short-lived GITHUB_TOKEN and logs out afterwards,
+# so no long-lived registry password is stored on the server.
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA (40 chars) to deploy; empty = newest main; "previous" = roll back one version'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ steps.run.outputs.url }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false      # never kill a deploy half-way; the next one waits
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+    steps:
+      - name: What to deploy
+        id: what
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+          DEFAULT_SHA: ${{ github.sha }}
+        run: |
+          if [[ -z "$SSH_HOST" || -z "$SSH_USER" ]]; then
+            echo "::notice::Deploy skipped: repository secrets SSH_HOST / SSH_USER / SSH_PRIVATE_KEY / SSH_KNOWN_HOSTS are not set yet (docs/DEPLOY.md §5)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          sha="${INPUT_SHA:-$DEFAULT_SHA}"
+          if [[ "$sha" == previous ]]; then
+            echo "mode=rollback" >> "$GITHUB_OUTPUT"
+            echo "Rolling back to the previous version recorded on the server"
+          elif [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "mode=deploy" >> "$GITHUB_OUTPUT"; echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            echo "Deploying $sha"
+          else
+            echo "::error::sha must be a full 40-character commit SHA, empty, or 'previous'"; exit 1
+          fi
+
+      - name: SSH setup (host key pinned)
+        if: steps.what.outputs.skip != 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          [[ -n "$SSH_PRIVATE_KEY" && -n "$SSH_KNOWN_HOSTS" ]] || { echo "::error::SSH_PRIVATE_KEY / SSH_KNOWN_HOSTS secret missing"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host server
+            HostName $SSH_HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+            BatchMode yes
+            ServerAliveInterval 30
+            ConnectTimeout 20
+          EOF
+          ssh server 'echo "connected to $(hostname) as $(whoami)"'
+
+      - name: Log the server in to GHCR (this job's token, read-only)
+        if: steps.what.outputs.skip != 'true'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -o pipefail
+          # shellcheck disable=SC2029  # $ACTOR is meant to expand here; the token goes over stdin, never on a command line
+          printf '%s' "$TOKEN" | ssh server "docker login ghcr.io -u '$ACTOR' --password-stdin"
+
+      - name: Deploy
+        id: run
+        if: steps.what.outputs.skip != 'true'
+        env:
+          MODE: ${{ steps.what.outputs.mode }}
+          SHA: ${{ steps.what.outputs.sha }}
+        run: |
+          set -o pipefail
+          if [[ "$MODE" == rollback ]]; then
+            ssh server '/opt/shaadilens/app/deploy/rollback.sh' | tee deploy.out
+          else
+            # Check out the target version first, so its own deploy.sh runs. ($SHA is validated: 40 hex chars.)
+            # shellcheck disable=SC2029
+            ssh server "cd /opt/shaadilens/app && git fetch -q origin && git -c advice.detachedHead=false checkout -q --detach $SHA && ./deploy/deploy.sh $SHA" | tee deploy.out
+          fi
+          url="$(sed -n 's/^DEPLOYED_URL=//p' deploy.out | tail -n1)"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Log the server out of GHCR
+        if: always() && steps.what.outputs.skip != 'true'
+        run: ssh server 'docker logout ghcr.io' || true
+
+      - name: Check from the internet
+        if: steps.what.outputs.skip != 'true'
+        env:
+          URL: ${{ steps.run.outputs.url }}
+        run: |
+          curl -fsS --retry 10 --retry-delay 6 --retry-all-errors -o /dev/null -w "GET $URL/health/live -> HTTP %{http_code}, TLS ok\n" "$URL/health/live"
+          status="$(curl -s --max-time 20 "$URL/health" | jq -r '.status // "unknown"')"
+          echo "GET $URL/health -> $status"
+          {
+            echo "### Deployed"
+            echo "- URL: $URL"
+            echo "- Version: \`$(sed -nE 's/^ *version *: *//p' deploy.out | tail -n1)\`"
+            echo "- /health: $status"
+          } >> "$GITHUB_STEP_SUMMARY"
