@@ -221,17 +221,25 @@ On the server (as `ubuntu`), add the public key:
 ```bash
 sudo bash /opt/shaadilens/app/deploy/bootstrap.sh --deploy-key "ssh-ed25519 AAAA… github-actions-deploy"
 ```
-GitHub → repo → **Settings → Secrets and variables → Actions → New repository secret**, four times:
+GitHub → repo → **Settings → Secrets and variables → Actions**. Three **secrets** (tab *Secrets* → *New repository
+secret*) and one **variable** (tab *Variables* → *New repository variable*):
 
-| Name | Value |
-|---|---|
-| `SSH_HOST` | the VM's public IP |
-| `SSH_USER` | `deploy` |
-| `SSH_PRIVATE_KEY` | the whole content of `shaadilens_deploy` (the file **without** `.pub`, including the BEGIN/END lines) |
-| `SSH_KNOWN_HOSTS` | the line printed by `ssh-keyscan` (pins the server's identity; the job refuses unknown hosts) |
+| Kind | Name | Value |
+|---|---|---|
+| secret | `SSH_HOST` | the VM's public IP |
+| secret | `SSH_PRIVATE_KEY` | the whole content of `shaadilens_deploy` (the file **without** `.pub`, including the BEGIN/END lines) |
+| secret | `SSH_KNOWN_HOSTS` | the line printed by `ssh-keyscan` (pins the server's identity; the job refuses unknown hosts) |
+| variable | `SSH_USER` | `deploy` |
+
+`SSH_USER` is a variable on purpose: GitHub replaces every secret value with `***` in logs, and a secret `deploy`
+would blank out every path containing `deploy/`. Or with the GitHub CLI (values via stdin, never on screen):
+```powershell
+"80.225.213.188" | gh secret set SSH_HOST;  Get-Content $env:USERPROFILE\.ssh\shaadilens_deploy -Raw | gh secret set SSH_PRIVATE_KEY
+ssh-keyscan -t ed25519 80.225.213.188 | gh secret set SSH_KNOWN_HOSTS;  gh variable set SSH_USER --body deploy
+```
 
 Then delete the private key file from your PC if you like — GitHub keeps the only copy it needs. Until these
-secrets exist, the deploy job is skipped with a notice.
+exist, the deploy job is skipped with a notice.
 
 ### Ship a change
 Merge the PR. Watch **Actions → CI → deploy**; the job summary shows the URL, version and `/health`.
