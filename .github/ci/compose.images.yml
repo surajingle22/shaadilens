@@ -1,0 +1,16 @@
+# CI only: run the stack from already-built images instead of building it.
+# Used by .github/ci/stack-smoke.sh together with docker-compose.yml (NOT the dev override).
+# Each variable is an image reference, e.g. ghcr.io/surajingle22/shaadilens-api@sha256:… or a local tag.
+services:
+  face-service:
+    image: ${FACE_IMAGE:?set FACE_IMAGE}
+    build: !reset null
+  api:
+    image: ${API_IMAGE:?set API_IMAGE}
+    build: !reset null
+  reel-worker:
+    image: ${REEL_IMAGE:?set REEL_IMAGE}
+    build: !reset null
+  web:
+    image: ${WEB_IMAGE:?set WEB_IMAGE}
+    build: !reset null
