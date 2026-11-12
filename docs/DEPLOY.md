@@ -114,3 +114,75 @@ Later, the GitHub Actions key is added with:
 ```bash
 sudo bash /opt/shaadilens/app/deploy/bootstrap.sh --deploy-key "ssh-ed25519 AAAA… github-actions-deploy"
 ```
+
+## 4. HTTPS with Caddy (production compose)
+
+**Reverse proxy, briefly:** one public entry point that forwards requests to services on Docker's private network.
+Caddy is that entry point. On first start it gets a free **Let's Encrypt** certificate for `DOMAIN` (Let's Encrypt
+checks you control the domain by calling `http://DOMAIN/.well-known/…`, so port 80 must be open and DuckDNS must
+point at the VM), renews it by itself every ~60 days and redirects `http://` to `https://`.
+
+```
+ phone ─HTTPS─► caddy :80/:443 ──► web (nginx: Angular + /api /media /hubs) ──► api ──► postgres / face-service
+                (only public ports)     (no published ports from here on)            reel-worker
+```
+
+Files: `docker-compose.prod.yml` (override of `docker-compose.yml`) and `deploy/Caddyfile`.
+
+| | Dev (`docker compose up`) | Production (`-f docker-compose.yml -f docker-compose.prod.yml`) |
+|---|---|---|
+| Images | built locally | pulled from GHCR, tag `IMAGE_TAG` (commit SHA) |
+| Public ports | web :8080 (+ debug ports from the dev override) | **only Caddy 80/443** |
+| HTTPS | none (or Cloudflare Tunnel) | Caddy + Let's Encrypt, HSTS |
+| `/hangfire` | admin login | **404 from the internet**; use the SSH tunnel below |
+| Swagger | on (`Development`) | off (`ASPNETCORE_ENVIRONMENT=Production` in `.env`) |
+| Logs | Docker default | 10 MB × 3 per container |
+| Music for reels | `./music` | `/opt/shaadilens/music` |
+
+**Real client IP.** The PIN brute-force limiter and the rate limiter need each guest's own IP. Caddy puts it in
+`X-Forwarded-For` (and drops any value a client sends). nginx passes that header on unchanged **only** for requests
+from Caddy, which it recognises by Caddy's address on the private `edge` network (`10.255.255.0/28`, created by
+`docker-compose.prod.yml`; the same range is in `nginx.conf` — keep them in sync, CI checks it). Any other request
+(dev, the laptop setup, Cloudflare Tunnel) gets its real peer address appended as before, so a forged header can
+never be the address ASP.NET uses.
+
+Certificates live in the `shaadilens_caddy_data` volume. Never delete it casually: Let's Encrypt allows only a
+few new certificates per domain per week.
+
+### First deploy by hand (before push-to-deploy exists)
+
+The GHCR packages are private, so the VM needs a token to pull. Create a **classic** token with only
+`read:packages`, 7-day expiry (GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)),
+then on the VM as `deploy`:
+```bash
+sudo -iu deploy
+cd /opt/shaadilens/app && git pull --ff-only
+docker login ghcr.io -u surajingle22          # paste the token when asked (it is not shown)
+export IMAGE_TAG=latest
+dc() { docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file /opt/shaadilens/.env "$@"; }
+dc pull && dc up -d
+dc ps                                         # wait until everything is "healthy" (face-service ~1 min)
+docker logout ghcr.io                         # don't leave the token on the server
+curl -sS https://<your-domain>/health         # {"status":"Healthy",…}
+```
+First start: Caddy needs ~10–30 s for the certificate (`dc logs caddy`). The api applies database migrations
+on start by itself (`DatabaseInitializer`), so there is no separate migration step.
+
+### Hangfire dashboard (SSH tunnel)
+
+`/hangfire` is blocked at Caddy. To open it, forward a local port to the `web` container through SSH (PowerShell):
+```powershell
+ssh -i $env:USERPROFILE\.ssh\shaadilens_oci -L 8081:localhost:8081 ubuntu@<VM_IP> `
+  "sudo docker run --rm -p 127.0.0.1:8081:8081 --network shaadilens_default alpine/socat TCP-LISTEN:8081,fork TCP:web:80"
+```
+Then log in at http://localhost:8081/admin and open http://localhost:8081/hangfire. Ctrl+C closes it.
+
+### Troubleshooting HTTPS
+
+| Symptom | Check |
+|---|---|
+| Browser: connection refused / timeout | Oracle security list has TCP 80 + 443; `sudo iptables -L INPUT -n --line-numbers` shows ACCEPT 80/443 above REJECT; `dc ps caddy` |
+| Caddy log: `challenge failed` / `NXDOMAIN` | DuckDNS points at the VM: `nslookup <domain>` = VM IP; port 80 reachable from outside |
+| Caddy log: `too many certificates` / `rateLimited` | Let's Encrypt rate limit — wait (see the time in the log); don't delete `caddy_data` |
+| Selfie camera doesn't open on the phone | page must be `https://`; check the padlock, and `PUBLIC_BASE_URL=https://${DOMAIN}` in `.env` |
+| Live updates fall back to polling | WebSockets through Caddy work by default; check `dc logs web api` for `/hubs` errors |

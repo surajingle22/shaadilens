@@ -51,6 +51,25 @@ jobs:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
       - run: docker compose -f docker-compose.yml config --quiet
+      - name: production override is valid and publishes only 80/443
+        run: |
+          rm .env
+          IMAGE_TAG=ci docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+            --env-file deploy/.env.production.example config > /tmp/prod.yml
+          published="$(grep -E '^\s+published:' /tmp/prod.yml | tr -dc '0-9\n' | sort -n | paste -sd ' ')"
+          echo "published ports: $published"
+          test "$published" = "80 443"
+          ! grep -qE '^\s+build:' /tmp/prod.yml
+      - name: nginx trusts X-Forwarded-For from the same subnet as the edge network
+        run: |
+          subnet="$(grep -E '^\s+- subnet:' docker-compose.prod.yml | awk '{print $3}')"
+          echo "edge subnet: $subnet"
+          grep -qE "^\s+${subnet//./\\.}\s+1;" frontend/shaadilens-web/nginx.conf
+      - name: Caddyfile is valid
+        run: |
+          docker run --rm -e DOMAIN=ci.example.com -e ACME_EMAIL=ci@example.com \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
   scripts:
     runs-on: ubuntu-latest
