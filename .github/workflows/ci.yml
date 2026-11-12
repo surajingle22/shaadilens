@@ -43,3 +43,15 @@ jobs:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
       - run: docker compose -f docker-compose.yml config --quiet
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck deploy scripts      # shellcheck is preinstalled on GitHub's Ubuntu runners
+        run: shellcheck deploy/*.sh scripts/*.sh
+      - name: production env template has no real secrets
+        run: |
+          # every secret line must be a placeholder (GENERATED / CHANGE_ME) or empty
+          ! grep -E '^(POSTGRES_PASSWORD|JWT_SECRET|MEDIA_SIGNING_KEY|DUCKDNS_TOKEN|ADMIN_PASSWORD|SMTP_PASS|VAPID_PRIVATE|UPLOADER_API_KEY)=' deploy/.env.production.example \
+            | grep -vE '=(GENERATED|CHANGE_ME)?$'
