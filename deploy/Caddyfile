@@ -1,0 +1,34 @@
+# Caddy = the only service reachable from the internet (ports 80 + 443).
+# It gets a free Let's Encrypt certificate for {$DOMAIN} on first start, renews it by itself,
+# redirects http:// to https:// and forwards everything to the `web` container (nginx), which
+# serves the Angular app and proxies /api, /media, /hubs to the .NET api — same as without Caddy.
+# DOMAIN and ACME_EMAIL come from /opt/shaadilens/.env (see docker-compose.prod.yml).
+
+{
+	email {$ACME_EMAIL}
+	servers {
+		# HTTP/1.1 + HTTP/2 only: the Oracle security list opens TCP 443, not UDP, so HTTP/3 would only
+		# make phones try (and time out on) a protocol that can't get through.
+		protocols h1 h2
+	}
+}
+
+{$DOMAIN} {
+	header {
+		# Browsers remember to use HTTPS for a year (phones need HTTPS for the selfie camera anyway).
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	# The Hangfire job dashboard is admin-only in the app, but it should not be reachable from the internet
+	# at all. Open it through an SSH tunnel instead (docs/DEPLOY.md).
+	@hangfire path /hangfire /hangfire/*
+	respond @hangfire 404
+
+	# WebSockets (SignalR /hubs), large chunked uploads and video Range requests pass through unchanged.
+	# flush_interval -1 streams responses (ZIP downloads, video) instead of buffering them.
+	# No access log on purpose: guest tokens travel as ?access_token= on /hubs.
+	reverse_proxy web:80 {
+		flush_interval -1
+	}
+}

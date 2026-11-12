@@ -1,0 +1,77 @@
+# PRODUCTION override — used on the server together with docker-compose.yml:
+#
+#   IMAGE_TAG=<commit sha> docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#       --env-file /opt/shaadilens/.env up -d          (deploy/deploy.sh does this for you)
+#
+# Differences from the dev setup:
+#  - ready-made images from GHCR (built by CI for amd64 + arm64); the server never builds anything
+#  - Caddy in front: the ONLY published ports are 80 and 443 (HTTPS with Let's Encrypt)
+#  - web/api/face-service/postgres/reel-worker publish no ports; they talk on Docker's internal network
+#  - log rotation on every container, restart: unless-stopped everywhere
+# Do NOT load docker-compose.override.yml here (it opens debug ports).
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    restart: unless-stopped
+    logging: *logging
+
+  face-service:
+    image: ${IMAGE_REGISTRY:-ghcr.io/surajingle22}/shaadilens-face-service:${IMAGE_TAG:?Set IMAGE_TAG (a commit SHA or latest)}
+    build: !reset null
+    restart: unless-stopped
+    logging: *logging
+
+  api:
+    image: ${IMAGE_REGISTRY:-ghcr.io/surajingle22}/shaadilens-api:${IMAGE_TAG:?Set IMAGE_TAG (a commit SHA or latest)}
+    build: !reset null
+    restart: unless-stopped
+    logging: *logging
+
+  reel-worker:
+    image: ${IMAGE_REGISTRY:-ghcr.io/surajingle22}/shaadilens-reel-worker:${IMAGE_TAG:?Set IMAGE_TAG (a commit SHA or latest)}
+    build: !reset null
+    restart: unless-stopped
+    volumes:
+      # same target path as in docker-compose.yml, so this replaces ./music with the server's music folder
+      - ${MUSIC_DIR:-/opt/shaadilens/music}:/data/music:ro
+    logging: *logging
+
+  web:
+    image: ${IMAGE_REGISTRY:-ghcr.io/surajingle22}/shaadilens-web:${IMAGE_TAG:?Set IMAGE_TAG (a commit SHA or latest)}
+    build: !reset null
+    restart: unless-stopped
+    ports: !reset []           # not public: only Caddy reaches it
+    logging: *logging
+
+  caddy:
+    image: caddy:2.10-alpine   # official image, multi-arch (arm64 + amd64)
+    restart: unless-stopped
+    ports:
+      - "80:80"                # Let's Encrypt HTTP challenge + redirect to HTTPS
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env (e.g. shaadilens.duckdns.org)}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # certificates + account key: must survive restarts (Let's Encrypt rate limits)
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]   # Caddy's admin API, container-local only
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+volumes:
+  caddy_data:
+  caddy_config:
