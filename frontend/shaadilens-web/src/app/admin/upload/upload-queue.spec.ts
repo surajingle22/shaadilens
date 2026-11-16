@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { UploadQueue } from './upload-queue';
+import { UploadQueue, readChunk } from './upload-queue';
 
 const file = (name: string, bytes: number) => new File([new Uint8Array(bytes)], name, { type: 'image/jpeg' });
 
@@ -31,7 +31,9 @@ describe('UploadQueue', () => {
 
     for (const [index, size] of [[0, 10], [1, 10], [2, 5]]) {
       const put = await vi.waitFor(() => http.expectOne(`/api/v1/uploads/u1/chunks/${index}`));
-      expect((put.request.body as Blob).size).toBe(size);
+      // Plain bytes, not a lazy Blob slice (iPhone Safari sent empty bodies for those).
+      expect(put.request.body).toBeInstanceOf(ArrayBuffer);
+      expect((put.request.body as ArrayBuffer).byteLength).toBe(size);
       put.flush(null);
     }
 
@@ -68,5 +70,25 @@ describe('UploadQueue', () => {
     await vi.waitFor(() => expect(queue.items()[0].state).toBe('done'));
     http.verify(); // chunk 0 was NOT re-sent
     vi.useRealTimers();
+  });
+
+  it('a photo the device cannot read fails with a clear message and sends nothing', async () => {
+    // Like an iPhone photo whose original isn't readable: the size is known, but reading returns nothing.
+    const unreadable = file('icloud.jpg', 12);
+    vi.spyOn(unreadable, 'slice').mockReturnValue(new Blob([]));
+    queue.add([unreadable], 'ev', 'col');
+    http.expectOne('/api/v1/events/ev/uploads').flush({ uploadId: 'u4', chunkSize: 10, totalChunks: 2 });
+
+    await vi.waitFor(() => expect(queue.items()[0].state).toBe('error'));
+    expect(queue.items()[0].error).toContain("Couldn't read this photo");
+    http.expectNone('/api/v1/uploads/u4/chunks/0');
+  });
+});
+
+describe('readChunk', () => {
+  it('returns exactly the requested bytes', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5, 6]);
+    const chunk = await readChunk(new Blob([bytes]), 2, 5);
+    expect(Array.from(new Uint8Array(chunk))).toEqual([3, 4, 5]);
   });
 });
