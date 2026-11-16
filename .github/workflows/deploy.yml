@@ -36,7 +36,9 @@ jobs:
       cancel-in-progress: false      # never kill a deploy half-way; the next one waits
     env:
       SSH_HOST: ${{ secrets.SSH_HOST }}
-      SSH_USER: ${{ secrets.SSH_USER }}
+      # A repository VARIABLE, not a secret: GitHub blanks out every secret value in logs, and "deploy" as a
+      # secret turned ./deploy/deploy.sh into ./***/***.sh. The user name isn't sensitive.
+      SSH_USER: ${{ vars.SSH_USER }}
     steps:
       - name: What to deploy
         id: what
@@ -45,7 +47,7 @@ jobs:
           DEFAULT_SHA: ${{ github.sha }}
         run: |
           if [[ -z "$SSH_HOST" || -z "$SSH_USER" ]]; then
-            echo "::notice::Deploy skipped: repository secrets SSH_HOST / SSH_USER / SSH_PRIVATE_KEY / SSH_KNOWN_HOSTS are not set yet (docs/DEPLOY.md §5)."
+            echo "::notice::Deploy skipped: repository secrets SSH_HOST / SSH_PRIVATE_KEY / SSH_KNOWN_HOSTS or variable SSH_USER are not set yet (docs/DEPLOY.md §5)."
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           sha="${INPUT_SHA:-$DEFAULT_SHA}"
