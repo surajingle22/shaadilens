@@ -27,6 +27,34 @@ const PARALLEL_FILES = 4;
 const CHUNK_RETRIES = 3;
 
 /**
+ * Reads bytes [start, end) of the file into memory before sending them.
+ * Sending `file.slice()` (a lazy Blob) directly made iPhone Safari send EMPTY request bodies on the HTTPS site
+ * ("Chunk 0 should be … bytes but was 0"): the photo-library File is read lazily, and the service worker that runs
+ * on HTTPS re-sends the request. Plain bytes in memory always arrive intact. If the phone can't read the photo
+ * (e.g. the original is still in iCloud), we say so instead of uploading nothing.
+ */
+export async function readChunk(file: Blob, start: number, end: number): Promise<ArrayBuffer> {
+  const part = file.slice(start, end);
+  const bytes = typeof part.arrayBuffer === 'function' ? await part.arrayBuffer() : await readWithFileReader(part);
+  if (bytes.byteLength !== end - start) {
+    throw new Error(
+      `Couldn't read this photo from the device (got ${bytes.byteLength} of ${end - start} bytes). ` +
+        'If it is stored in iCloud, open it in Photos once so it downloads, then retry.',
+    );
+  }
+  return bytes;
+}
+
+function readWithFileReader(blob: Blob): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error ?? new Error('Could not read the file'));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+/**
  * Upload queue (app-wide singleton, so uploads keep going while you browse other admin pages).
  *
  * Per file:  init → PUT chunk 0..N-1 (skipping chunks the server already has) → complete
@@ -115,8 +143,8 @@ export class UploadQueue {
       for (let index = 0; index < totalChunks; index++) {
         if (received.has(index)) continue;
         const start = index * chunkSize;
-        const blob = item.file.slice(start, Math.min(start + chunkSize, item.file.size));
-        await this.putChunkWithRetry(uploadId, index, blob, (loaded) =>
+        const bytes = await readChunk(item.file, start, Math.min(start + chunkSize, item.file.size));
+        await this.putChunkWithRetry(uploadId, index, bytes, (loaded) =>
           this.patch(id, { progress: Math.min(0.99, (start + loaded) / item.file.size) }),
         );
       }
@@ -124,16 +152,17 @@ export class UploadQueue {
       const result = await this.api.completeUpload(uploadId);
       this.patch(id, { state: result.status === 'duplicate' ? 'duplicate' : 'done', progress: 1 });
     } catch (err) {
-      this.patch(id, { state: 'error', error: errorMessage(err, 'Upload failed') });
+      // HttpErrorResponse is not an Error; a plain Error is ours (e.g. readChunk) and carries a useful message.
+      this.patch(id, { state: 'error', error: err instanceof Error ? err.message : errorMessage(err, 'Upload failed') });
     } finally {
       this.pump();
     }
   }
 
-  private async putChunkWithRetry(uploadId: string, index: number, blob: Blob, onProgress: (loaded: number) => void) {
+  private async putChunkWithRetry(uploadId: string, index: number, bytes: ArrayBuffer, onProgress: (loaded: number) => void) {
     for (let attempt = 1; ; attempt++) {
       try {
-        await lastValueFrom(this.putChunk(uploadId, index, blob, onProgress));
+        await lastValueFrom(this.putChunk(uploadId, index, bytes, onProgress));
         return;
       } catch (err) {
         if (attempt >= CHUNK_RETRIES) throw err;
@@ -142,9 +171,9 @@ export class UploadQueue {
     }
   }
 
-  private putChunk(uploadId: string, index: number, blob: Blob, onProgress: (loaded: number) => void): Observable<unknown> {
+  private putChunk(uploadId: string, index: number, bytes: ArrayBuffer, onProgress: (loaded: number) => void): Observable<unknown> {
     return this.http
-      .put(API.uploadChunk(uploadId, index), blob, {
+      .put(API.uploadChunk(uploadId, index), bytes, {
         headers: new HttpHeaders({ 'Content-Type': 'application/octet-stream' }),
         reportProgress: true,
         observe: 'events',
